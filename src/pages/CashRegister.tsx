@@ -1,0 +1,142 @@
+import React, { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db';
+import { Lock, LockOpen, TrendingUp, TrendingDown, Clock, Printer } from 'lucide-react';
+import { formatCurrency } from '../utils/format';
+import { OpenCashModal } from '../components/cash/OpenCashModal';
+import { CashMovementModal } from '../components/cash/CashMovementModal';
+import { CloseCashModal } from '../components/cash/CloseCashModal';
+
+export const CashRegister: React.FC = () => {
+  const [isOpenerOpen, setOpenerOpen] = useState(false);
+  const [isCloserOpen, setCloserOpen] = useState(false);
+  const [movementType, setMovementType] = useState<'SUPPLY' | 'BLEED' | null>(null);
+
+  const activeSession = useLiveQuery(
+    () => db.cashSessions.where('status').equals('OPEN').first()
+  );
+
+  const movements = useLiveQuery(
+    () => activeSession ? db.cashMovements.where('sessionId').equals(activeSession.id).toArray() : []
+  );
+
+  if (activeSession === undefined) return <div>Carregando...</div>;
+
+  if (!activeSession) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center">
+          <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+            <Lock className="w-12 h-12 text-slate-400" />
+          </div>
+          <h1 className="text-3xl font-bold text-slate-800 mb-4">Caixa Fechado</h1>
+          <p className="text-slate-500 mb-8 max-w-md">
+            Abra o caixa para iniciar as vendas do dia e registrar as movimentações financeiras.
+          </p>
+          <button 
+            onClick={() => setOpenerOpen(true)}
+            className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-600/20"
+          >
+            Abrir Caixa Agora
+          </button>
+        </div>
+        <OpenCashModal isOpen={isOpenerOpen} onClose={() => setOpenerOpen(false)} onSuccess={() => {}} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+            <LockOpen className="w-8 h-8 text-green-500" />
+            Caixa Aberto
+          </h1>
+          <p className="text-slate-500 mt-2 flex items-center gap-2">
+            <Clock className="w-4 h-4" /> Aberto em {new Date(activeSession.openedAt).toLocaleString()} por {activeSession.cashierName}
+          </p>
+        </div>
+        <div className="flex gap-4">
+          <button onClick={() => setMovementType('BLEED')} className="px-4 py-2 bg-red-100 text-red-700 font-semibold rounded-lg hover:bg-red-200 flex items-center gap-2">
+            <TrendingDown className="w-4 h-4" /> Sangria
+          </button>
+          <button onClick={() => setMovementType('SUPPLY')} className="px-4 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" /> Suprimento
+          </button>
+          <button onClick={() => setCloserOpen(true)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-black">
+            Fechar Caixa
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="text-sm font-semibold text-slate-500 mb-2">Esperado em Dinheiro na Gaveta</div>
+          <div className="text-4xl font-bold text-green-600">{formatCurrency(activeSession.expectedCashInDrawer)}</div>
+          <div className="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-600 flex justify-between">
+            <span>Fundo Inicial:</span>
+            <span>{formatCurrency(activeSession.initialBalance)}</span>
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="text-sm font-semibold text-slate-500 mb-2">Total de Vendas</div>
+          <div className="text-4xl font-bold text-blue-600">{formatCurrency(activeSession.totalSales.total)}</div>
+          <div className="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-600 grid grid-cols-2 gap-2">
+            <div className="flex justify-between pr-2"><span>Dinheiro:</span> <span>{formatCurrency(activeSession.totalSales.cash)}</span></div>
+            <div className="flex justify-between pl-2 border-l"><span>Pix:</span> <span>{formatCurrency(activeSession.totalSales.pix)}</span></div>
+            <div className="flex justify-between pr-2"><span>Crédito:</span> <span>{formatCurrency(activeSession.totalSales.credit)}</span></div>
+            <div className="flex justify-between pl-2 border-l"><span>Débito:</span> <span>{formatCurrency(activeSession.totalSales.debit)}</span></div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="text-sm font-semibold text-slate-500 mb-2">Movimentações Extras</div>
+          <div className="text-4xl font-bold text-slate-800">{formatCurrency(activeSession.totalIn - activeSession.initialBalance - activeSession.totalOut)}</div>
+          <div className="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-600 flex justify-between">
+            <span className="text-green-600">+ Entradas: {formatCurrency(activeSession.totalIn - activeSession.initialBalance)}</span>
+            <span className="text-red-600">- Saídas: {formatCurrency(activeSession.totalOut)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 className="font-bold text-lg text-slate-800 mb-4">Histórico de Movimentações</h3>
+        {movements && movements.length > 0 ? (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b text-slate-500">
+                <th className="pb-3">Hora</th>
+                <th className="pb-3">Tipo</th>
+                <th className="pb-3">Valor</th>
+                <th className="pb-3">Motivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movements.map(m => (
+                <tr key={m.id} className="border-b border-slate-50">
+                  <td className="py-3 text-slate-600">{new Date(m.date).toLocaleTimeString()}</td>
+                  <td className="py-3">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${m.type === 'SUPPLY' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+                      {m.type === 'SUPPLY' ? 'Suprimento' : 'Sangria'}
+                    </span>
+                  </td>
+                  <td className={`py-3 font-semibold ${m.type === 'SUPPLY' ? 'text-blue-600' : 'text-red-600'}`}>
+                    {m.type === 'SUPPLY' ? '+' : '-'}{formatCurrency(m.amount)}
+                  </td>
+                  <td className="py-3 text-slate-600">{m.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="text-center text-slate-400 py-8">Nenhuma movimentação registrada no turno atual.</div>
+        )}
+      </div>
+
+      <CashMovementModal isOpen={movementType !== null} onClose={() => setMovementType(null)} onSuccess={() => {}} type={movementType || 'SUPPLY'} sessionId={activeSession.id} />
+      <CloseCashModal isOpen={isCloserOpen} onClose={() => setCloserOpen(false)} onSuccess={() => {}} session={activeSession} />
+    </div>
+  );
+};
