@@ -3,6 +3,7 @@ import { X, Lock, Printer } from 'lucide-react';
 import { db } from '../../db';
 import { formatCurrency } from '../../utils/format';
 import { CashSession } from '../../types';
+import { toast } from 'sonner';
 
 interface CloseCashModalProps {
   isOpen: boolean;
@@ -14,25 +15,42 @@ interface CloseCashModalProps {
 export const CloseCashModal: React.FC<CloseCashModalProps> = ({ isOpen, onClose, onSuccess, session }) => {
   const [countedCash, setCountedCash] = useState('');
   const [notes, setNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const diff = (parseFloat(countedCash) || 0) - session.expectedCashInDrawer;
+  const counted = parseFloat(countedCash) || 0;
+  const diff = counted - session.expectedCashInDrawer;
 
   const handleClose = async () => {
-    session.closedAt = new Date().toISOString();
-    session.actualCashCounted = parseFloat(countedCash) || 0;
-    session.difference = diff;
-    session.notes = notes;
-    session.status = 'CLOSED';
+    if (isSaving) return; // Evita fechamento duplicado com cliques rápidos
+    if (counted < 0) {
+      toast.error('O valor contado não pode ser negativo.');
+      return;
+    }
 
-    await db.cashSessions.put(session);
-    
-    // Print report here...
-    window.print();
-    
-    onSuccess();
-    onClose();
+    setIsSaving(true);
+    try {
+      // Nunca mutar o objeto da live query: update() grava só os campos alterados
+      // (mutar `session` em memória corrompia a reatividade do Dexie e outras views).
+      await db.cashSessions.update(session.id, {
+        closedAt: new Date().toISOString(),
+        actualCashCounted: counted,
+        difference: Number(diff.toFixed(2)),
+        notes,
+        status: 'CLOSED'
+      });
+
+      window.print();
+
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error('Erro ao fechar o caixa.');
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -119,8 +137,8 @@ export const CloseCashModal: React.FC<CloseCashModalProps> = ({ isOpen, onClose,
 
         <div className="p-4 bg-slate-100 dark:bg-slate-900/60 flex gap-2 print:hidden">
           <button onClick={onClose} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-semibold text-slate-700 dark:text-slate-300">Cancelar</button>
-          <button onClick={handleClose} disabled={countedCash === ''} className="flex-1 py-3 bg-slate-900 rounded-xl font-bold text-white hover:bg-black flex items-center justify-center gap-2 disabled:opacity-50">
-            <Printer className="w-5 h-5" /> Fechar Caixa e Imprimir Relatório
+          <button onClick={handleClose} disabled={countedCash === '' || isSaving} className="flex-1 py-3 bg-slate-900 rounded-xl font-bold text-white hover:bg-black flex items-center justify-center gap-2 disabled:opacity-50">
+            <Printer className="w-5 h-5" /> {isSaving ? 'Fechando...' : 'Fechar Caixa e Imprimir Relatório'}
           </button>
         </div>
 

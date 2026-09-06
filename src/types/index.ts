@@ -107,6 +107,31 @@ export interface Sale {
   cancelledAt?: string;
   cashierSessionId?: string;
   notes?: string;
+  // Trilha de devoluções parciais: a venda permanece COMPLETED com itens/valores
+  // ajustados (quantidades, total, custo e formas de pagamento líquidos), e cada
+  // devolução fica registrada aqui para auditoria completa.
+  refunds?: SaleRefund[];
+  refundedAmount?: number;
+}
+
+export interface SaleRefundItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  amount: number;
+  costPrice: number;
+}
+
+export interface SaleRefund {
+  id: string;
+  saleId: string;
+  date: string;
+  reason: string;
+  amount: number;
+  items: SaleRefundItem[];
+  paymentRefunds: PaymentMethodEntry[];
+  cashierSessionId?: string;
 }
 
 export interface Customer {
@@ -205,5 +230,35 @@ export interface User {
   name: string;
   email: string;
   role: 'ADMIN' | 'MANAGER' | 'CASHIER';
+  /** PIN em texto puro — legado; novos cadastros usam pinHash */
   pin?: string;
+  /** Hash SHA-256 do PIN (login local, offline-first) */
+  pinHash?: string;
+}
+
+/** Entidades locais espelhadas na nuvem (Supabase) pelo motor de sync. */
+export type SyncEntity =
+  | 'sales'
+  | 'stockMovements'
+  | 'cashSessions'
+  | 'cashMovements'
+  | 'debtRecords'
+  | 'customers';
+
+/**
+ * Outbox transacional: cada gravação local em tabela sincronizada gera (via
+ * hook Dexie, na MESMA transação) uma entrada pendente. O motor de push lê a
+ * entrada, busca o estado atual da entidade e envia um upsert idempotente.
+ * A chave é `entity:entityId` — gravações repetidas coalescem numa só entrada.
+ */
+export interface SyncOutboxEntry {
+  id: string;
+  entity: SyncEntity;
+  entityId: string;
+  op: 'PUT' | 'DELETE';
+  createdAt: string;
+  updatedAt: string;
+  attempts: number;
+  lastError?: string;
+  lastAttemptAt?: string;
 }

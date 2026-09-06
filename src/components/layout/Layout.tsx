@@ -2,14 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ShortcutsModal } from '../common/ShortcutsModal';
+import type { AuthSession } from '../../utils/auth';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
   onNavigate: (view: string) => void;
+  user: AuthSession;
+  onLogout: () => void;
 }
 
-export function Layout({ children, currentView, onNavigate }: LayoutProps) {
+export function Layout({ children, currentView, onNavigate, user, onLogout }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
@@ -42,6 +45,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         <Sidebar 
           currentView={currentView} 
           collapsed={isSidebarCollapsed}
+          userRole={user.role}
           onNavigate={(v) => { onNavigate(v); setIsSidebarOpen(false); }} 
         />
       </div>
@@ -53,6 +57,8 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
           sidebarCollapsed={isSidebarCollapsed}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onNavigate={onNavigate}
+          user={user}
+          onLogout={onLogout}
         />
         <main className="flex-1 overflow-auto p-4 lg:p-6">
           {children}

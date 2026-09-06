@@ -50,25 +50,37 @@ export function StockMovementModal({ isOpen, onClose, product, onSuccess }: Stoc
     const previousStock = prod.stock;
     let newStock = previousStock;
 
-    if (type === 'IN') newStock += quantity;
-    else if (type === 'OUT') newStock = Math.max(0, previousStock - quantity);
-    else if (type === 'ADJUST') newStock = quantity;
+    if (type === 'IN') newStock = Number((previousStock + quantity).toFixed(3));
+    else if (type === 'OUT') {
+      // Nunca clamp silenciosamente para zero: uma saída maior que o estoque
+      // é uma movimentação impossível e escondê-la corrompe a trilha de auditoria.
+      if (quantity > previousStock + 0.0001) {
+        toast.error(`Estoque insuficiente para saída: o produto "${prod.name}" tem ${previousStock} ${prod.unit} e você está dando baixa de ${quantity} ${prod.unit}.`);
+        return;
+      }
+      newStock = Number((previousStock - quantity).toFixed(3));
+    }
+    else if (type === 'ADJUST') newStock = Number(quantity.toFixed(3));
 
     try {
-      await db.products.update(prod.id, { stock: newStock, updatedAt: new Date().toISOString() });
-      
-      await db.stockMovements.add({
-        id: crypto.randomUUID(),
-        productId: prod.id,
-        productName: prod.name,
-        type,
-        quantity: type === 'ADJUST' ? Math.abs(newStock - previousStock) : quantity,
-        previousStock,
-        newStock,
-        reason,
-        date: new Date().toISOString(),
-        userId: 'Admin',
-        costPrice: prod.costPrice
+      // Atômico: estoque só muda junto com a movimentação correspondente
+      // (antes eram duas gravações separadas — falha no meio deixava estado parcial).
+      await db.transaction('rw', [db.products, db.stockMovements], async () => {
+        await db.products.update(prod.id, { stock: newStock, updatedAt: new Date().toISOString() });
+
+        await db.stockMovements.add({
+          id: crypto.randomUUID(),
+          productId: prod.id,
+          productName: prod.name,
+          type,
+          quantity: type === 'ADJUST' ? Math.abs(newStock - previousStock) : quantity,
+          previousStock,
+          newStock,
+          reason,
+          date: new Date().toISOString(),
+          userId: 'Admin',
+          costPrice: prod.costPrice
+        });
       });
 
       toast.success(`Estoque do produto "${prod.name}" atualizado para ${newStock} ${prod.unit}!`);
@@ -76,6 +88,7 @@ export function StockMovementModal({ isOpen, onClose, product, onSuccess }: Stoc
       onClose();
     } catch (err) {
       toast.error('Erro ao salvar movimentação.');
+      console.error(err);
     }
   };
 

@@ -146,16 +146,20 @@ export function Financial() {
 
   // Cálculo de Autonomia (Cobertura de Estoque) e Sugestão de Compra por Produto
   const productAnalyticsList = activeProducts.map(p => {
-    // Vendas do produto nos últimos 30 dias
+    // Vendas do produto nos últimos 30 dias — soma TODOS os itens da venda que
+    // casam com o produto (antes usava find(), perdendo vendas com o mesmo
+    // produto em mais de uma linha, ex.: pacote + avulso no mesmo cupom).
     const productSales30d = sales.filter(s => s.status === 'COMPLETED' && new Date(s.date) >= thirtyDaysAgo)
       .reduce((sum, s) => {
-        const item = s.items.find(i => i.productId.startsWith(p.id));
-        if (!item) return sum;
-        // Converte frações vendidas (ex: cigarro avulso) para a unidade do pacote,
-        // senão a autonomia mistura unidades incomparáveis (fração vs estoque).
-        const qty = item.isAlternativeUnit && item.originalUnitFactor
-          ? item.quantity / item.originalUnitFactor
-          : item.quantity;
+        const qty = s.items
+          .filter(i => i.productId === p.id || i.productId === `${p.id}-alt`)
+          .reduce((acc, item) => {
+            // Converte frações vendidas (ex: cigarro avulso) para a unidade do
+            // pacote, senão a autonomia mistura unidades incomparáveis.
+            return acc + (item.isAlternativeUnit && item.originalUnitFactor
+              ? item.quantity / item.originalUnitFactor
+              : item.quantity);
+          }, 0);
         return sum + qty;
       }, 0);
 
@@ -327,7 +331,9 @@ export function Financial() {
 
   const topCustomers = [...customers]
     .map(c => {
-      const customerSales = sales.filter(s => s.customerId === c.id);
+      // Só vendas CONCLUÍDAS contam para o histórico de compras do cliente
+      // (antes incluía canceladas/estornadas, inflando o valor do cliente).
+      const customerSales = sales.filter(s => s.customerId === c.id && s.status === 'COMPLETED');
       const totalPurchased = customerSales.reduce((acc, s) => acc + s.total, 0);
       return {
         ...c,

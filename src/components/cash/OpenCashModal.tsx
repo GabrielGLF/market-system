@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Wallet } from 'lucide-react';
 import { db } from '../../db';
+import { getSession } from '../../utils/auth';
 
 interface OpenCashModalProps {
   isOpen: boolean;
@@ -10,7 +11,8 @@ interface OpenCashModalProps {
 
 export const OpenCashModal: React.FC<OpenCashModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [initialAmount, setInitialAmount] = useState('0');
-  const [cashierName, setCashierName] = useState('Operador 1');
+  // Pré-preenche com o operador autenticado (login local)
+  const [cashierName, setCashierName] = useState(() => getSession()?.name || 'Operador 1');
   const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;

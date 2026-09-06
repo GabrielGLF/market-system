@@ -2,19 +2,43 @@ import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { Product, Category } from '../types';
-import { Search, Tags, History, TrendingUp, Percent, DollarSign } from 'lucide-react';
+import { Search, Tags, History, TrendingUp, Percent, DollarSign, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
+import { calculateMargin, calculateMarkup } from '../utils/calc';
 import { QuickPricePopover } from '../components/pricing/QuickPricePopover';
 import { PriceHistoryModal } from '../components/pricing/PriceHistoryModal';
 
 export function Pricing() {
   const products = useLiveQuery(() => db.products.filter(p => p.isActive).toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
+  const priceHistories = useLiveQuery(() => db.priceHistories.toArray()) || [];
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
   const [activePopoverProduct, setActivePopoverProduct] = useState<Product | null>(null);
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+
+  // --- Alertas de Precificação (dados reais, nada inventado) ---
+  // Última alteração de preço/custo de cada produto, para detectar custo que
+  // subiu sem o preço de venda acompanhar.
+  const latestHistoryByProduct = new Map<string, (typeof priceHistories)[number]>();
+  for (const h of priceHistories) {
+    const cur = latestHistoryByProduct.get(h.productId);
+    if (!cur || new Date(h.date) > new Date(cur.date)) {
+      latestHistoryByProduct.set(h.productId, h);
+    }
+  }
+
+  const lowMarginProducts = products.filter(p => {
+    const m = calculateMargin(p.costPrice, p.sellPrice);
+    return p.sellPrice > 0 && m < 10;
+  });
+
+  const costUpNoReprice = products.filter(p => {
+    const h = latestHistoryByProduct.get(p.id);
+    // Custo subiu na última alteração e o preço de venda não mudou junto
+    return Boolean(h && h.newCostPrice > h.oldCostPrice && h.newSellPrice === h.oldSellPrice);
+  });
 
   const filteredProducts = products.filter((p: Product) => {
     const matchesSearch = 
@@ -25,16 +49,6 @@ export function Pricing() {
     const matchesCategory = selectedCategory === 'ALL' || p.categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const calculateMargin = (cost: number, sell: number) => {
-    if (sell <= 0) return 0;
-    return ((sell - cost) / sell) * 100;
-  };
-
-  const calculateMarkup = (cost: number, sell: number) => {
-    if (cost <= 0) return 0;
-    return ((sell - cost) / cost) * 100;
-  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -50,6 +64,59 @@ export function Pricing() {
           </p>
         </div>
       </div>
+
+      {/* Alertas de Precificação — insights acionáveis com base em dados reais */}
+      {(lowMarginProducts.length > 0 || costUpNoReprice.length > 0) && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-amber-200 dark:border-amber-800/60 overflow-hidden">
+          <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <h2 className="text-sm font-bold text-amber-900 dark:text-amber-300">Alertas de Precificação</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-amber-100 dark:bg-amber-900/40">
+            {lowMarginProducts.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-4">
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-2">
+                  ⚠️ Margem abaixo de 10% ({lowMarginProducts.length})
+                </p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {lowMarginProducts.slice(0, 10).map(p => (
+                    <div key={p.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
+                      <span className="truncate pr-2">{p.name}</span>
+                      <span className="font-bold whitespace-nowrap">{calculateMargin(p.costPrice, p.sellPrice).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                  {lowMarginProducts.length > 10 && (
+                    <p className="text-[10px] text-slate-400">+{lowMarginProducts.length - 10} outros — revise a tabela abaixo.</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {costUpNoReprice.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 p-4">
+                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-2">
+                  📈 Custo subiu sem reajuste de preço ({costUpNoReprice.length})
+                </p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {costUpNoReprice.slice(0, 10).map(p => {
+                    const h = latestHistoryByProduct.get(p.id)!;
+                    return (
+                      <div key={p.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
+                        <span className="truncate pr-2">{p.name}</span>
+                        <span className="whitespace-nowrap">
+                          Custo {formatCurrency(h.oldCostPrice)} → {formatCurrency(h.newCostPrice)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {costUpNoReprice.length > 10 && (
+                    <p className="text-[10px] text-slate-400">+{costUpNoReprice.length - 10} outros.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tabela de Preços */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">

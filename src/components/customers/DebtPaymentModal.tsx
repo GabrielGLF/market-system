@@ -28,24 +28,34 @@ export function DebtPaymentModal({ onClose, customer }: DebtPaymentModalProps) {
 
     try {
       const now = new Date().toISOString();
-      const newBalance = customer.debtBalance - Number(amount);
 
-      await db.transaction('rw', db.customers, db.debtRecords, async () => {
-        // Create debt record
+      await db.transaction('rw', [db.customers, db.debtRecords], async () => {
+        // Relê o cliente DENTRO da transação: o saldo da tela pode estar
+        // defasado, e o histórico da dívida nunca pode divergir do saldo atual.
+        const freshCustomer = await db.customers.get(customer.id);
+        if (!freshCustomer) {
+          throw new Error('Cliente não encontrado.');
+        }
+
+        if (Number(amount) > freshCustomer.debtBalance + 0.0001) {
+          throw new Error('O valor pago não pode ser maior que o saldo devedor.');
+        }
+
+        const newBalance = Number((freshCustomer.debtBalance - Number(amount)).toFixed(2));
+
         await db.debtRecords.add({
           id: crypto.randomUUID(),
           customerId: customer.id,
           saleId: '',
           type: 'PAYMENT',
           amount: Number(amount),
-          previousBalance: customer.debtBalance,
-          newBalance: newBalance,
+          previousBalance: freshCustomer.debtBalance,
+          newBalance,
           date: now,
           description: `${description} (${paymentMethod})`,
           receiptNumber: `REC-${Date.now()}`
         });
 
-        // Update customer balance
         await db.customers.update(customer.id, {
           debtBalance: newBalance,
           updatedAt: now
@@ -55,7 +65,7 @@ export function DebtPaymentModal({ onClose, customer }: DebtPaymentModalProps) {
       toast.success('Pagamento registrado com sucesso!');
       onClose();
     } catch (err) {
-      toast.error('Erro ao registrar pagamento.');
+      toast.error(err instanceof Error ? err.message : 'Erro ao registrar pagamento.');
       console.error(err);
     }
   };

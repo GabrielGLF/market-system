@@ -1,14 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { Settings as SettingsIcon, Save, Database, Download, Upload, RefreshCw, Store, CreditCard, Bell, MapPin, Receipt } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Database, Download, Upload, RefreshCw, Store, CreditCard, Bell, MapPin, Receipt, CloudUpload, CloudOff, Cloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { seedDatabase } from '../db/seed';
 import { exportDatabaseToJson, importDatabaseFromJson, downloadJson } from '../utils/export';
+import { syncNow, getLastSyncAt, getLastSyncError } from '../utils/sync';
+import { isServerAuthConfigured } from '../utils/serverAuth';
+import { formatDateTime } from '../utils/format';
 import type { StoreSettings } from '../types';
+import type { AuthSession } from '../utils/auth';
 
-export function Settings() {
+interface SettingsProps {
+  user?: AuthSession | null;
+}
+
+export function Settings({ user }: SettingsProps) {
   const settings = useLiveQuery(() => db.settings.toCollection().first());
+  const pendingSync = useLiveQuery(() => db.syncOutbox.count(), [], 0);
+  const serverConfigured = isServerAuthConfigured();
+  const isCloudSession = user?.provider === 'server';
   
   const [formData, setFormData] = useState<Partial<StoreSettings>>({
     companyName: '',
@@ -105,17 +116,34 @@ export function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
         const json = event.target?.result as string;
+        // Só restaura se o arquivo for um backup válido (nunca apaga dados com
+        // um arquivo corrompido/errado — antes o erro no onload passava em branco).
         await importDatabaseFromJson(json);
         toast.success('Backup restaurado com sucesso!');
         setTimeout(() => window.location.reload(), 1000);
-      };
-      reader.readAsText(file);
-    } catch (err) {
-      toast.error('Erro ao restaurar arquivo de backup.');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erro ao restaurar arquivo de backup.');
+        console.error(err);
+      }
+    };
+    reader.onerror = () => {
+      toast.error('Não foi possível ler o arquivo selecionado.');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSyncNow = async () => {
+    const res = await syncNow();
+    if (res.error) {
+      toast.error(res.error);
+    } else if (res.pushed > 0) {
+      toast.success(`Sincronizado: ${res.pushed} registro(s) enviado(s).`);
+    } else {
+      toast.success('Tudo sincronizado — nada pendente.');
     }
   };
 
@@ -389,6 +417,78 @@ export function Settings() {
               </div>
             </label>
           </div>
+        </div>
+      </div>
+
+      {/* Sincronização com a Nuvem */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <h2 className="text-base font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+          <CloudUpload className="w-5 h-5 text-sky-600" />
+          Sincronização com a Nuvem (Supabase)
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          O PDV continua offline-first: as vendas, o estoque e o caixa são gravados
+          primeiro no dispositivo e espelhados na nuvem quando há conexão. Nada é
+          enviado sem sessão de conta ativa.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {serverConfigured ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+              <Cloud className="w-3.5 h-3.5" /> Nuvem configurada
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+              <CloudOff className="w-3.5 h-3.5" /> Nuvem não configurada (VITE_SUPABASE_URL/KEY)
+            </span>
+          )}
+
+          {isCloudSession ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+              Conta em nuvem ativa — sincronizando automaticamente
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+              Entre com a conta (nuvem) para ativar a sincronização
+            </span>
+          )}
+
+          {pendingSync > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300">
+              {pendingSync} registro(s) aguardando envio
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <div className="bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Última sincronização</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white mt-0.5">
+              {getLastSyncAt() ? formatDateTime(getLastSyncAt()!) : 'Nunca'}
+            </p>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Pendentes</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white mt-0.5">
+              {pendingSync} registro(s)
+            </p>
+          </div>
+        </div>
+
+        {getLastSyncError() && (
+          <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-400">
+            <strong>Último erro:</strong> {getLastSyncError()}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3 items-center">
+          <button
+            onClick={handleSyncNow}
+            disabled={!serverConfigured || pendingSync === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors"
+          >
+            <CloudUpload className="w-4 h-4" /> Sincronizar Agora
+          </button>
         </div>
       </div>
 

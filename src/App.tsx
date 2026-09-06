@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { Layout } from './components/layout/Layout';
+import { LoginScreen } from './components/auth/LoginScreen';
+import { getSession, clearSession, buildSession, AuthSession } from './utils/auth';
+import { logoutServer } from './utils/serverAuth';
+import type { User } from './types';
 import { Dashboard } from './pages/Dashboard';
 import { PDV } from './pages/PDV';
 import { Inventory } from './pages/Inventory';
@@ -16,6 +20,7 @@ import { CustomerDisplay } from './pages/CustomerDisplay';
 import { MobileScanner } from './pages/MobileScanner';
 import { seedDatabase } from './db/seed';
 import { db } from './db';
+import { installSyncHooks, startSyncEngine, stopSyncEngine, syncNow } from './utils/sync';
 
 function App() {
   const [currentView, setCurrentView] = useState<string>(() => {
@@ -25,6 +30,24 @@ function App() {
   });
 
   const [isInitializing, setIsInitializing] = useState(true);
+  const [user, setUser] = useState<AuthSession | null>(() => getSession());
+
+  // Outbox de sincronização: hooks instalados uma única vez, antes de qualquer
+  // gravação (toda escrita em tabela sincronizada gera entrada pendente).
+  useEffect(() => {
+    installSyncHooks();
+  }, []);
+
+  // Motor de sync: ativo apenas com sessão de nuvem (Supabase Auth). Login
+  // local por PIN continua offline-first — o outbox acumula e é enviado depois.
+  useEffect(() => {
+    if (user?.provider === 'server') {
+      startSyncEngine();
+    } else {
+      stopSyncEngine();
+    }
+    return () => stopSyncEngine();
+  }, [user?.provider]);
 
   useEffect(() => {
     const initDb = async () => {
@@ -57,6 +80,51 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Navegação programática via evento (ex.: "Repetir Venda" no histórico envia
+  // o operador de volta ao PDV).
+  useEffect(() => {
+    const handleNavigate = (e: Event) => {
+      const view = (e as CustomEvent).detail?.view;
+      if (typeof view === 'string' && view) setCurrentView(view);
+    };
+    window.addEventListener('market-system:navigate', handleNavigate);
+    return () => window.removeEventListener('market-system:navigate', handleNavigate);
+  }, []);
+
+  // Controle de acesso por papel: operador de caixa não abre áreas administrativas
+  const RESTRICTED_VIEWS: Record<string, string[]> = {
+    CASHIER: ['settings', 'financial']
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    const blocked = RESTRICTED_VIEWS[user.role] || [];
+    if (blocked.includes(currentView)) {
+      toast.error('Acesso restrito: operador de caixa não pode abrir esta área.');
+      setCurrentView('dashboard');
+    }
+  }, [user, currentView]);
+
+  const handleLoggedIn = (loggedUser: User) => {
+    // Preserva o provider (server/local) gravado na sessão por quem autenticou
+    const session = getSession() || buildSession(loggedUser);
+    setUser(session);
+    setCurrentView('dashboard');
+    // Acabou de entrar com a conta: empurra o que ficou pendente offline
+    if (session.provider === 'server') {
+      void syncNow();
+    }
+  };
+
+  const handleLogout = async () => {
+    // Encerra a sessão na nuvem (melhor esforço, tolerante a offline) e depois a local
+    await logoutServer();
+    clearSession();
+    setUser(null);
+    setCurrentView('dashboard');
+    toast.info('Sessão encerrada.');
+  };
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
@@ -80,7 +148,7 @@ function App() {
       case 'movements':
         return <StockMovements />;
       case 'settings':
-        return <Settings />;
+        return <Settings user={user} />;
       case 'customer-display':
         return <CustomerDisplay />;
       case 'mobile-scanner':
@@ -111,9 +179,24 @@ function App() {
     );
   }
 
+  // Tela de login: o PDV (e todo o sistema) só abre com operador autenticado
+  if (!user) {
+    return (
+      <>
+        <LoginScreen onLoggedIn={handleLoggedIn} />
+        <Toaster position="top-right" richColors theme="dark" />
+      </>
+    );
+  }
+
   return (
     <>
-      <Layout currentView={currentView} onNavigate={setCurrentView}>
+      <Layout
+        currentView={currentView}
+        onNavigate={setCurrentView}
+        user={user}
+        onLogout={handleLogout}
+      >
         {renderView()}
       </Layout>
       <Toaster position="top-right" richColors theme="system" />

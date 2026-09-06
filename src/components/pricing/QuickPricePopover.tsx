@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { Product } from '../../types';
 import { Save, X, DollarSign, Percent } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { calculateMargin, calculateSellPrice } from '../../utils/calc';
 
 interface QuickPricePopoverProps {
   product: Product;
@@ -12,23 +13,17 @@ interface QuickPricePopoverProps {
 
 export function QuickPricePopover({ product, onClose, onSaved }: QuickPricePopoverProps) {
   const [sellPrice, setSellPrice] = useState(product.sellPrice);
-  const [margin, setMargin] = useState(
-    product.sellPrice > 0 ? ((product.sellPrice - product.costPrice) / product.sellPrice) * 100 : 0
-  );
+  const [margin, setMargin] = useState(calculateMargin(product.costPrice, product.sellPrice));
 
   const handleSellPriceChange = (val: number) => {
     setSellPrice(val);
-    if (val > 0) {
-      setMargin(((val - product.costPrice) / val) * 100);
-    } else {
-      setMargin(0);
-    }
+    setMargin(val > 0 ? calculateMargin(product.costPrice, val) : 0);
   };
 
   const handleMarginChange = (val: number) => {
     setMargin(val);
     if (val < 100) {
-      setSellPrice(product.costPrice / (1 - val / 100));
+      setSellPrice(calculateSellPrice(product.costPrice, val));
     }
   };
 
@@ -44,7 +39,7 @@ export function QuickPricePopover({ product, onClose, onSaved }: QuickPricePopov
         newSellPrice: sellPrice,
         oldCostPrice: product.costPrice,
         newCostPrice: product.costPrice,
-        oldMargin: product.sellPrice > 0 ? ((product.sellPrice - product.costPrice) / product.sellPrice) * 100 : 0,
+        oldMargin: Number(calculateMargin(product.costPrice, product.sellPrice).toFixed(1)),
         newMargin: margin,
         changePercentage: product.sellPrice > 0 ? ((sellPrice - product.sellPrice) / product.sellPrice) * 100 : 0,
         date: new Date().toISOString(),

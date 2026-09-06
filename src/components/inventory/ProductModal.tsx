@@ -3,6 +3,7 @@ import type { Product, Category } from '../../types';
 import { db } from '../../db';
 import { X, Save, AlertTriangle, Image as ImageIcon, Layers, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
+import { calculateMargin } from '../../utils/calc';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -142,7 +143,10 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
 
     const now = new Date().toISOString();
     let productId = currentProd?.id;
-    const oldPrice = currentProd?.sellPrice;
+    const oldSellPrice = currentProd?.sellPrice;
+    const oldCostPrice = currentProd?.costPrice;
+    const newSellPrice = Number(formData.sellPrice || 0);
+    const newCostPrice = Number(formData.costPrice || 0);
 
     const payload: Product = {
       ...(formData as Product),
@@ -175,24 +179,34 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
       await db.products.add(payload);
     }
 
-    if (oldPrice !== formData.sellPrice && productId) {
-      const margin = formData.sellPrice && formData.sellPrice > 0 
-        ? ((formData.sellPrice - (formData.costPrice || 0)) / formData.sellPrice) * 100 
+    // Histórico íntegro de preço/custo: só para produtos EXISTENTES (produto novo
+    // não tem "alteração" para registrar), registra mudança de custo OU de venda,
+    // e grava a margem ANTERIOR real (antes ficava fixa em 0, corrompendo o histórico).
+    const priceOrCostChanged = Boolean(currentProd) && (
+      oldSellPrice !== newSellPrice || oldCostPrice !== newCostPrice
+    );
+    if (priceOrCostChanged && productId) {
+      const oldMargin = oldSellPrice && oldSellPrice > 0
+        ? calculateMargin(oldCostPrice || 0, oldSellPrice)
+        : 0;
+      const newMargin = calculateMargin(newCostPrice, newSellPrice);
+      const changePercentage = oldSellPrice && oldSellPrice > 0
+        ? ((newSellPrice - oldSellPrice) / oldSellPrice) * 100
         : 0;
 
       await db.priceHistories.add({
         id: crypto.randomUUID(),
         productId,
         productName: formData.name!,
-        oldSellPrice: oldPrice || 0,
-        newSellPrice: formData.sellPrice || 0,
-        oldCostPrice: currentProd?.costPrice || 0,
-        newCostPrice: formData.costPrice || 0,
-        oldMargin: 0,
-        newMargin: margin,
-        changePercentage: oldPrice ? ((formData.sellPrice! - oldPrice) / oldPrice) * 100 : 0,
+        oldSellPrice: oldSellPrice || 0,
+        newSellPrice,
+        oldCostPrice: oldCostPrice || 0,
+        newCostPrice,
+        oldMargin: Number(oldMargin.toFixed(1)),
+        newMargin: Number(newMargin.toFixed(1)),
+        changePercentage: Number(changePercentage.toFixed(2)),
         date: now,
-        reason: currentProd ? 'Atualização de Cadastro' : 'Cadastro Inicial',
+        reason: 'Atualização de Cadastro',
         userId: 'Admin'
       });
     }
@@ -217,9 +231,7 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
 
   if (!isOpen) return null;
 
-  const margin = formData.sellPrice && formData.sellPrice > 0 
-    ? (((formData.sellPrice - (formData.costPrice || 0)) / formData.sellPrice) * 100).toFixed(1)
-    : '0.0';
+  const margin = calculateMargin(Number(formData.costPrice || 0), Number(formData.sellPrice || 0)).toFixed(1);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">

@@ -7,12 +7,14 @@ import {
   Tag, X, LockOpen 
 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
+import { toPackUnits } from '../utils/calc';
 import type { SaleItem, Product, PaymentMethodEntry, Sale } from '../types';
 import { PaymentModal } from '../components/pdv/PaymentModal';
 import { ReceiptModal } from '../components/pdv/ReceiptModal';
 import { BarcodeScannerModal } from '../components/pdv/BarcodeScannerModal';
 import { MobileScannerModal } from '../components/pdv/MobileScannerModal';
 import { useCustomerDisplay } from '../hooks/useCustomerDisplay';
+import { takePendingRepeatSale, subscribeRepeatSale } from '../utils/repeatSale';
 import confetti from 'canvas-confetti';
 import { playSuccess, playBeep, playError } from '../utils/audio';
 import { toast } from 'sonner';
@@ -130,6 +132,101 @@ export const PDV: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
   }, [cart]);
 
+  // Repetir Venda: recarrega no carrinho os itens de uma venda anterior
+  // (cliente fiel), usando os dados atuais do produto (preço, estoque, unidade).
+  const applyRepeatSale = async (items: SaleItem[]) => {
+    const rebuilt: SaleItem[] = [];
+    const warnings: string[] = [];
+
+    for (const item of items) {
+      const rawProdId = item.productId.replace('-alt', '');
+      const product = await db.products.get(rawProdId);
+
+      if (!product) {
+        warnings.push(`"${item.productName}" não está mais cadastrado e foi ignorado.`);
+        continue;
+      }
+      if (!product.isActive) {
+        warnings.push(`"${item.productName}" está inativo e foi ignorado.`);
+        continue;
+      }
+
+      const isAlternative = Boolean(item.isAlternativeUnit) && Boolean(product.alternativeUnit);
+      const unitName = isAlternative ? product.alternativeUnit!.name : product.unit;
+      const unitPrice = isAlternative ? product.alternativeUnit!.price : product.sellPrice;
+      const costPrice = isAlternative
+        ? product.costPrice / (product.alternativeUnit?.factor || 1)
+        : product.costPrice;
+      const cartItemId = isAlternative ? `${product.id}-alt` : product.id;
+      const subtotal = Number((unitPrice * item.quantity).toFixed(2));
+
+      rebuilt.push({
+        productId: cartItemId,
+        productName: isAlternative ? `${product.name} (${product.alternativeUnit!.name})` : product.name,
+        quantity: item.quantity,
+        unit: unitName,
+        unitPrice,
+        costPrice,
+        subtotal,
+        discount: 0,
+        total: subtotal,
+        isAlternativeUnit: isAlternative,
+        originalUnitFactor: isAlternative ? product.alternativeUnit?.factor : undefined
+      });
+
+      // Aviso de estoque (a validação final continua na finalização da venda)
+      const needed = toPackUnits(item.quantity, isAlternative ? product.alternativeUnit?.factor : undefined);
+      if (needed > product.stock + 0.0001) {
+        warnings.push(`"${product.name}": estoque insuficiente para repetir (disponível ${product.stock} ${product.unit}, necessário ${needed.toFixed(3)}).`);
+      }
+    }
+
+    if (rebuilt.length === 0) {
+      playError();
+      toast.error('Nenhum item pôde ser repetido — todos estão inativos ou sem estoque.');
+      return;
+    }
+
+    setCart(prev => {
+      const next = [...prev];
+      for (const newItem of rebuilt) {
+        const idx = next.findIndex(i => i.productId === newItem.productId);
+        if (idx >= 0) {
+          const existing = next[idx];
+          const qty = existing.quantity + newItem.quantity;
+          const sub = existing.unitPrice * qty;
+          next[idx] = { ...existing, quantity: qty, subtotal: sub, total: Math.max(0, sub - existing.discount) };
+        } else {
+          next.push(newItem);
+        }
+      }
+      return next;
+    });
+
+    playBeep();
+    toast.success(`${rebuilt.length} ${rebuilt.length === 1 ? 'item repetido' : 'itens repetidos'} no carrinho.`);
+    warnings.forEach(w => toast.warning(w));
+    setSearchTerm('');
+    searchInputRef.current?.focus();
+  };
+
+  // Ao montar o PDV, consome a venda pendente vinda do Histórico de Vendas
+  useEffect(() => {
+    const pending = takePendingRepeatSale();
+    if (pending && pending.length > 0) {
+      applyRepeatSale(pending);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PDV já montado: repetição disparada pelo cupom recém-finalizado (ReceiptModal)
+  useEffect(() => {
+    return subscribeRepeatSale(items => {
+      if (items.length > 0) applyRepeatSale(items);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleProductClick = (product: Product) => {
     if (product.stock <= 0) {
       toast.warning(`Atenção: "${product.name}" está sem estoque.`);
@@ -202,6 +299,17 @@ export const PDV: React.FC = () => {
     }));
   };
 
+  // Desconto por item: nunca pode passar do subtotal da linha nem ser negativo
+  const updateItemDiscount = (cartItemId: string, discount: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.productId === cartItemId) {
+        const d = Math.min(Math.max(0, discount), item.subtotal);
+        return { ...item, discount: d, total: Math.max(0, item.subtotal - d) };
+      }
+      return item;
+    }));
+  };
+
   const removeFromCart = (cartItemId: string) => {
     setCart(prev => prev.filter(item => item.productId !== cartItemId));
   };
@@ -255,9 +363,7 @@ export const PDV: React.FC = () => {
         toast.error(`Produto "${item.productName}" não encontrado no cadastro.`);
         return;
       }
-      const deduction = item.isAlternativeUnit && item.originalUnitFactor
-        ? item.quantity / item.originalUnitFactor
-        : item.quantity;
+      const deduction = toPackUnits(item.quantity, item.isAlternativeUnit ? item.originalUnitFactor : undefined);
       const current = stockNeeded.get(rawProdId) || { name: p.name, needed: 0, available: p.stock };
       current.needed += deduction;
       stockNeeded.set(rawProdId, current);
@@ -323,9 +429,7 @@ export const PDV: React.FC = () => {
           const rawProdId = item.productId.replace('-alt', '');
           const p = await db.products.get(rawProdId);
           if (p) {
-            const deduction = item.isAlternativeUnit && item.originalUnitFactor 
-              ? item.quantity / item.originalUnitFactor 
-              : item.quantity;
+            const deduction = toPackUnits(item.quantity, item.isAlternativeUnit ? item.originalUnitFactor : undefined);
 
             const previousStock = p.stock;
             const newStock = Number((previousStock - deduction).toFixed(3));
@@ -623,6 +727,32 @@ export const PDV: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Desconto por item (F2/F3: alteração rápida sem sair da linha) */}
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Desc.</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={item.subtotal}
+                      value={item.discount || ''}
+                      placeholder="0.00"
+                      onChange={(e) => updateItemDiscount(item.productId, parseFloat(e.target.value) || 0)}
+                      className={`w-16 px-1.5 py-0.5 text-right text-[11px] font-bold rounded-md border focus:outline-none focus:ring-1 ${
+                        item.discount > 0
+                          ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 focus:ring-rose-400'
+                          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 focus:ring-emerald-400'
+                      }`}
+                    />
+                  </div>
+                  {item.discount > 0 && (
+                    <span className="text-[10px] font-semibold text-rose-500">
+                      -{formatCurrency(item.discount)} na linha
+                    </span>
+                  )}
+                </div>
+
                 <button 
                   onClick={() => removeFromCart(item.productId)} 
                   className="absolute top-2.5 right-2.5 text-slate-400 hover:text-rose-600 p-1 transition-colors"
@@ -646,7 +776,7 @@ export const PDV: React.FC = () => {
             <span>Desconto Geral (R$)</span>
             <input 
               type="number"
-              step="0.50"
+              step="0.01"
               min="0"
               value={globalDiscount || ''}
               onChange={(e) => setGlobalDiscount(Math.min(Math.max(0, parseFloat(e.target.value) || 0), subtotal))}

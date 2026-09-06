@@ -1,9 +1,10 @@
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { X, Printer, Share2, ShoppingBag, Check } from 'lucide-react';
+import { X, Printer, Share2, ShoppingBag, Check, Repeat } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../../utils/format';
 import type { Sale } from '../../types';
+import { requestRepeatSale } from '../../utils/repeatSale';
 
 interface ReceiptModalProps {
   isOpen: boolean;
@@ -18,6 +19,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sal
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleRepeat = () => {
+    requestRepeatSale(sale.items);
+    onClose();
   };
 
   const handleShare = () => {
@@ -162,6 +168,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sal
             className="flex-1 py-2.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
           >
             <Share2 className="w-4 h-4 text-emerald-600" /> WhatsApp
+          </button>
+
+          <button
+            onClick={handleRepeat}
+            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow transition-colors"
+            title="Recarregar os mesmos itens no carrinho (cliente fiel)"
+          >
+            <Repeat className="w-4 h-4" /> Repetir
           </button>
           
           <button 

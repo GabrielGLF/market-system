@@ -3,8 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { 
   Search, Download, FileText, ChevronRight, ShoppingBag, 
-  TrendingUp, DollarSign, Calendar, Clock, RotateCcw
+  TrendingUp, DollarSign, Calendar, Clock, RotateCcw, Repeat
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { requestRepeatSale } from '../utils/repeatSale';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { SaleDetailModal } from '../components/sales/SaleDetailModal';
 import { generateSalesPdf } from '../utils/salesPdf';
@@ -73,6 +75,11 @@ export function Sales() {
     const total = salesInHour.reduce((acc, s) => acc + s.total, 0);
     return { hour: hourLabel, total, count: salesInHour.length };
   });
+
+  const repeatSale = (sale: Sale) => {
+    requestRepeatSale(sale.items);
+    toast.success(`Itens da venda #${sale.saleNumber} enviados para o PDV.`);
+  };
 
   const exportCSV = () => {
     const headers = ['Numero', 'Data e Hora', 'Cliente', 'Status', 'Itens', 'Subtotal', 'Desconto', 'Total', 'Lucro', 'Formas de Pagamento'];
@@ -358,16 +365,33 @@ export function Sales() {
                         {sale.discount > 0 && (
                           <p className="text-[10px] text-rose-500 font-medium">-{formatCurrency(sale.discount)} desc</p>
                         )}
+                        {(sale.refundedAmount || 0) > 0 && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            ↩ {formatCurrency(sale.refundedAmount || 0)} devolvido
+                          </p>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setSelectedSale(sale)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition-colors"
-                        >
-                          Ver Detalhes
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          {!isCancelled && (
+                            <button
+                              onClick={() => repeatSale(sale)}
+                              title={`Repetir venda #${sale.saleNumber} no PDV`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-medium transition-colors"
+                            >
+                              <Repeat className="w-3.5 h-3.5" />
+                              Repetir
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedSale(sale)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Ver Detalhes
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -378,13 +402,17 @@ export function Sales() {
         </div>
       </div>
 
-      {/* Modal de Detalhes da Venda com Estorno */}
+      {/* Modal de Detalhes da Venda com Estorno / Devolução Parcial */}
       {selectedSale && (
         <SaleDetailModal
           sale={selectedSale}
           onClose={() => setSelectedSale(null)}
           onUpdate={() => {
-            // Venda atualizada (ex: estornada)
+            // Recarrega a venda selecionada para refletir devoluções parciais
+            // (o estado `selectedSale` é um snapshot; a live query atualiza a tabela).
+            db.sales.get(selectedSale.id).then(fresh => {
+              if (fresh) setSelectedSale(fresh);
+            });
           }}
         />
       )}

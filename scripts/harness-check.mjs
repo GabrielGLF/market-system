@@ -15,6 +15,11 @@ const checks = [
     args: ["run", "lint"],
   },
   {
+    name: "Unit tests (vitest)",
+    cmd: command("npm"),
+    args: ["run", "test"],
+  },
+  {
     name: "TypeScript + Vite production build",
     cmd: command("npm"),
     args: ["run", "build"],

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { db } from '../../db';
+import { toast } from 'sonner';
+import { formatCurrency } from '../../utils/format';
 
 interface CashMovementModalProps {
   isOpen: boolean;
@@ -22,30 +24,49 @@ export const CashMovementModal: React.FC<CashMovementModalProps> = ({ isOpen, on
     const val = parseFloat(amount);
     if (!val || val <= 0 || !reason) return;
 
-    await db.cashMovements.add({
-      id: crypto.randomUUID(),
-      sessionId,
-      type,
-      amount: val,
-      reason,
-      date: new Date().toISOString(),
-      cashierName: 'Operador Atual'
-    });
+    try {
+      // Atômico: a movimentação e a atualização do caixa são uma única transação
+      // (antes eram duas gravações separadas — falha no meio deixava estado parcial).
+      await db.transaction('rw', [db.cashMovements, db.cashSessions], async () => {
+        const session = await db.cashSessions.get(sessionId);
+        if (!session) {
+          throw new Error('Sessão de caixa não encontrada.');
+        }
 
-    const session = await db.cashSessions.get(sessionId);
-    if (session) {
-      if (isSupply) {
-        session.totalIn += val;
-        session.expectedCashInDrawer += val;
-      } else {
-        session.totalOut += val;
-        session.expectedCashInDrawer -= val;
-      }
-      await db.cashSessions.put(session);
+        // Uma sangria não pode retirar mais do que há fisicamente na gaveta
+        if (!isSupply && val > session.expectedCashInDrawer + 0.0001) {
+          throw new Error(`Sangria inválida: a gaveta tem ${formatCurrency(session.expectedCashInDrawer)} e você está retirando ${formatCurrency(val)}.`);
+        }
+
+        await db.cashMovements.add({
+          id: crypto.randomUUID(),
+          sessionId,
+          type,
+          amount: val,
+          reason,
+          date: new Date().toISOString(),
+          cashierName: session.cashierName || 'Operador'
+        });
+
+        if (isSupply) {
+          await db.cashSessions.update(sessionId, {
+            totalIn: Number((session.totalIn + val).toFixed(2)),
+            expectedCashInDrawer: Number((session.expectedCashInDrawer + val).toFixed(2))
+          });
+        } else {
+          await db.cashSessions.update(sessionId, {
+            totalOut: Number((session.totalOut + val).toFixed(2)),
+            expectedCashInDrawer: Number((session.expectedCashInDrawer - val).toFixed(2))
+          });
+        }
+      });
+
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar movimentação de caixa.');
+      console.error(err);
     }
-
-    onSuccess();
-    onClose();
   };
 
   return (

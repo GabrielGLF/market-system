@@ -11,6 +11,7 @@ interface SidebarProps {
   currentView: string;
   onNavigate: (view: string) => void;
   collapsed?: boolean;
+  userRole?: 'ADMIN' | 'MANAGER' | 'CASHIER';
 }
 
 const menuItems = [
@@ -27,7 +28,12 @@ const menuItems = [
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 
-export function Sidebar({ currentView, onNavigate, collapsed = false }: SidebarProps) {
+export function Sidebar({ currentView, onNavigate, collapsed = false, userRole = 'ADMIN' }: SidebarProps) {
+  // Operador de caixa não enxerga áreas administrativas (Configurações, Financeiro)
+  const visibleItems = userRole === 'CASHIER'
+    ? menuItems.filter(item => item.id !== 'settings' && item.id !== 'financial')
+    : menuItems;
+
   return (
     <div className={`flex flex-col h-full bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
       <div className={`flex items-center justify-center h-16 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-inner ${collapsed ? 'px-0' : 'px-3'}`}>
@@ -37,7 +43,7 @@ export function Sidebar({ currentView, onNavigate, collapsed = false }: SidebarP
       
       <div className="flex-1 overflow-y-auto py-4">
         <nav className={`space-y-1 ${collapsed ? 'px-2' : 'px-3'}`}>
-          {menuItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
             

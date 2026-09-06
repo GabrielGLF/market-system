@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { 
-  Menu, Wifi, WifiOff, Sun, Moon, Monitor, 
-  Keyboard, User, ShoppingCart, Wallet, ChevronDown, Check, 
-  PanelLeftClose, PanelLeftOpen 
+  Menu, WifiOff, Sun, Moon, Monitor,
+  Keyboard, ShoppingCart, Wallet, ChevronDown, LogOut,
+  PanelLeftClose, PanelLeftOpen, Cloud, ShieldCheck, CloudUpload
 } from 'lucide-react';
-import { toast } from 'sonner';
+import type { AuthSession } from '../../utils/auth';
 
 interface HeaderProps {
   onOpenSidebar: () => void;
@@ -14,27 +14,20 @@ interface HeaderProps {
   sidebarCollapsed: boolean;
   onOpenShortcuts: () => void;
   onNavigate: (view: string) => void;
+  user: AuthSession;
+  onLogout: () => void;
 }
 
-export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpenShortcuts, onNavigate }: HeaderProps) {
+const roleLabel: Record<AuthSession['role'], string> = {
+  ADMIN: 'Administrador',
+  MANAGER: 'Gerente',
+  CASHIER: 'Operador de Caixa'
+};
+
+export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpenShortcuts, onNavigate, user, onLogout }: HeaderProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     return (localStorage.getItem('theme') as any) || 'system';
-  });
-
-  const [activeUser, setActiveUser] = useState<{ name: string; role: 'ADMIN' | 'MANAGER' | 'CASHIER' }>(() => {
-    const saved = localStorage.getItem('market_active_user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.name === 'string' && parsed.role) {
-          return parsed;
-        }
-      } catch {
-        // localStorage corrompido: ignora e usa o padrão
-      }
-    }
-    return { name: 'Admin Principal', role: 'ADMIN' };
   });
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -42,6 +35,8 @@ export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpe
   const activeCashSession = useLiveQuery(() => 
     db.cashSessions.where('status').equals('OPEN').first()
   );
+
+  const pendingSync = useLiveQuery(() => db.syncOutbox.count(), [], 0);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -73,14 +68,6 @@ export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpe
     else setTheme('light');
   };
 
-  const handleSelectUser = (name: string, role: 'ADMIN' | 'MANAGER' | 'CASHIER') => {
-    const newUser = { name, role };
-    setActiveUser(newUser);
-    localStorage.setItem('market_active_user', JSON.stringify(newUser));
-    setIsUserMenuOpen(false);
-    toast.success(`Usuário alterado para "${name}" (${role})`);
-  };
-
   const isCashOpen = !!activeCashSession;
 
   return (
@@ -103,9 +90,13 @@ export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpe
         </button>
         
         <div className="hidden sm:flex items-center ml-2 space-x-2">
-          {isOnline ? (
+          {isOnline && user.provider === 'server' && pendingSync > 0 ? (
+            <span className="flex items-center text-amber-600 dark:text-amber-400 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800/50" title="Aguardando envio para a nuvem">
+              <CloudUpload className="w-3.5 h-3.5 mr-1.5" /> {pendingSync} pendente{pendingSync > 1 ? 's' : ''}
+            </span>
+          ) : isOnline ? (
             <span className="flex items-center text-emerald-600 dark:text-emerald-400 text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> Online & Sincronizado
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> {user.provider === 'server' ? 'Sincronizado' : 'Online (local)'}
             </span>
           ) : (
             <span className="flex items-center text-amber-600 dark:text-amber-400 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800/50">
@@ -163,53 +154,43 @@ export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpe
             className="flex items-center bg-slate-100 dark:bg-slate-700/80 px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors gap-2"
           >
             <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
-              {activeUser.name.charAt(0)}
+              {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="hidden sm:block text-left">
-              <p className="text-xs font-bold text-slate-800 dark:text-white leading-none">{activeUser.name}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{activeUser.role}</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-white leading-none">{user.name}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{roleLabel[user.role]}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
           </button>
 
-          {/* User Menu Dropdown */}
+          {/* Menu do Usuário Logado */}
           {isUserMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50">
-              <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 text-xs font-semibold text-slate-400 uppercase">
-                Alternar Usuário Ativo
+            <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-50">
+              <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-700">
+                <p className="text-sm font-bold text-slate-800 dark:text-white">{user.name}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">{user.email}</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                    {roleLabel[user.role]}
+                  </span>
+                  {user.provider === 'server' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300" title="Sessão validada no Supabase Auth">
+                      <Cloud className="w-3 h-3" /> Nuvem
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300" title="Sessão local por PIN (offline-first)">
+                      <ShieldCheck className="w-3 h-3" /> Local
+                    </span>
+                  )}
+                </div>
               </div>
 
               <button
-                onClick={() => handleSelectUser('Admin Geral', 'ADMIN')}
-                className="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between text-slate-800 dark:text-slate-200"
+                onClick={() => { setIsUserMenuOpen(false); onLogout(); }}
+                className="w-full px-3 py-2.5 text-left text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 text-rose-600 dark:text-rose-400"
               >
-                <div>
-                  <p>Admin Geral</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Acesso total ao sistema</p>
-                </div>
-                {activeUser.role === 'ADMIN' && <Check className="w-4 h-4 text-emerald-600" />}
-              </button>
-
-              <button
-                onClick={() => handleSelectUser('Carlos Gerente', 'MANAGER')}
-                className="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between text-slate-800 dark:text-slate-200"
-              >
-                <div>
-                  <p>Carlos Gerente</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Gerente de Loja</p>
-                </div>
-                {activeUser.role === 'MANAGER' && <Check className="w-4 h-4 text-emerald-600" />}
-              </button>
-
-              <button
-                onClick={() => handleSelectUser('Ana Operadora', 'CASHIER')}
-                className="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between text-slate-800 dark:text-slate-200"
-              >
-                <div>
-                  <p>Ana Operadora</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Operadora de Caixa</p>
-                </div>
-                {activeUser.role === 'CASHIER' && <Check className="w-4 h-4 text-emerald-600" />}
+                <LogOut className="w-4 h-4" />
+                Sair da Conta
               </button>
             </div>
           )}

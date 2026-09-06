@@ -6,6 +6,7 @@ import {
   CreditCard, Check, Save, Sparkles, TrendingUp 
 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
+import { calculateSellPrice, calculateMaxCost } from '../utils/calc';
 import { toast } from 'sonner';
 
 export function PriceCalculator() {
@@ -58,12 +59,12 @@ export function PriceCalculator() {
   let effectiveMargin = 0;
 
   if (mode === 'COST_TO_PRICE') {
-    calculatedSellPrice = desiredMargin < 100 ? cost / (1 - desiredMargin / 100) : 0;
+    calculatedSellPrice = desiredMargin < 100 ? calculateSellPrice(cost, desiredMargin) : 0;
     grossProfit = calculatedSellPrice - cost;
     effectiveMargin = desiredMargin;
     markup = cost > 0 ? (grossProfit / cost) * 100 : 0;
   } else if (mode === 'PRICE_TO_COST') {
-    calculatedCost = targetSellPrice * (1 - desiredMargin / 100);
+    calculatedCost = calculateMaxCost(targetSellPrice, desiredMargin);
     calculatedSellPrice = targetSellPrice;
     grossProfit = targetSellPrice - calculatedCost;
     effectiveMargin = desiredMargin;

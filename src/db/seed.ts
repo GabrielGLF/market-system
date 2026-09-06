@@ -1,4 +1,6 @@
 import { db } from './index';
+import { hashPin } from '../utils/auth';
+import { setSyncPaused } from '../utils/sync';
 import type { 
   Category, Product, StoreSettings, Customer, User, Sale, SaleItem, 
   CashSession, CashMovement, DebtRecord, StockMovement, PriceHistory 
@@ -8,6 +10,17 @@ import type {
 const generateId = () => crypto.randomUUID();
 
 export async function seedDatabase(force: boolean = false) {
+  // Dados de demonstração não devem ser espelhados na nuvem: o outbox de sync
+  // fica pausado durante todo o seed (e sempre é religado, mesmo em falha).
+  setSyncPaused(true);
+  try {
+    await seedDatabaseInner(force);
+  } finally {
+    setSyncPaused(false);
+  }
+}
+
+async function seedDatabaseInner(force: boolean): Promise<void> {
   const productsCount = await db.products.count();
   
   if (productsCount > 0 && !force) {
@@ -60,12 +73,19 @@ export async function seedDatabase(force: boolean = false) {
   };
   await db.settings.put(settings);
 
-  // 2. Users
+  // 2. Users (PINs armazenados como hash SHA-256, nunca em texto puro)
   const adminId = generateId();
+  const managerId = generateId();
   const cashierId = generateId();
+  const [adminPinHash, managerPinHash, cashierPinHash] = await Promise.all([
+    hashPin('1234'),
+    hashPin('2222'),
+    hashPin('1111')
+  ]);
   await db.users.bulkPut([
-    { id: adminId, name: 'Administrador', email: 'admin@mercado.com', role: 'ADMIN', pin: '1234' },
-    { id: cashierId, name: 'Operador de Caixa', email: 'caixa@mercado.com', role: 'CASHIER', pin: '1111' }
+    { id: adminId, name: 'Administrador', email: 'admin@mercado.com', role: 'ADMIN', pinHash: adminPinHash },
+    { id: managerId, name: 'Gerente', email: 'gerente@mercado.com', role: 'MANAGER', pinHash: managerPinHash },
+    { id: cashierId, name: 'Operador de Caixa', email: 'caixa@mercado.com', role: 'CASHIER', pinHash: cashierPinHash }
   ]);
 
   // 3. Categories
@@ -330,10 +350,40 @@ export async function seedDatabase(force: boolean = false) {
   sales.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   stockMovements.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  // Trilha de dívida CONSISTENTE: cada registro guarda o saldo anterior/novo
+  // encadeado em ordem cronológica por cliente, e o saldo atual do cliente é
+  // exatamente a soma do histórico (nunca pode divergir do extrato).
+  const debtsByCustomer = new Map<string, DebtRecord[]>();
+  for (const d of debts) {
+    const list = debtsByCustomer.get(d.customerId) || [];
+    list.push(d);
+    debtsByCustomer.set(d.customerId, list);
+  }
+  const finalBalances = new Map<string, number>();
+  const consistentDebts: DebtRecord[] = [];
+  for (const [customerId, list] of debtsByCustomer) {
+    list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    let running = 0;
+    for (const d of list) {
+      d.previousBalance = Number(running.toFixed(2));
+      running = Number((running + d.amount).toFixed(2));
+      d.newBalance = running;
+      consistentDebts.push(d);
+    }
+    finalBalances.set(customerId, running);
+  }
+
   await db.sales.bulkPut(sales);
-  await db.debtRecords.bulkPut(debts);
+  await db.debtRecords.bulkPut(consistentDebts);
   await db.stockMovements.bulkPut(stockMovements);
   await db.priceHistories.bulkPut(priceHistories);
+
+  // Saldo devedor do cliente = soma real dos débitos (antes ficava fixo e
+  // não batia com o extrato gerado).
+  await db.customers.bulkPut(customers.map(c => ({
+    ...c,
+    debtBalance: finalBalances.get(c.id) ?? c.debtBalance
+  })));
 
   console.log('Database successfully seeded with highly realistic market data!');
 }

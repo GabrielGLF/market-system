@@ -56,3 +56,12 @@ export function calculateMaxCost(sell: number, desiredMarginPercentage: number):
 export function convertAlternativeUnitStock(qty: number, factor: number): number {
   return Number((qty * factor).toFixed(3));
 }
+
+/**
+ * Converte uma quantidade vendida na unidade alternativa (fração) para a
+ * unidade do pacote/embalagem. Usada para baixar estoque e calcular autonomia.
+ * Ex.: 3 cigarros avulsos com fator 20 → 0.15 pacotes.
+ */
+export function toPackUnits(quantity: number, factor?: number): number {
+  return factor && factor > 0 ? Number((quantity / factor).toFixed(3)) : quantity;
+}
