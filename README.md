@@ -134,6 +134,26 @@ O **MarketSystem** é totalmente responsivo e funciona como Progressive Web App 
 
 ---
 
+## 🤖 Loop de Engenharia com Codex
+
+O repositório inclui um harness de engenharia iterativa para o Codex, com limite de ciclos, sandbox de escrita apenas no workspace e validação independente por lint/build.
+
+Validação determinística:
+
+```bash
+npm run harness:check
+```
+
+Executar um objetivo em loop:
+
+```bash
+npm run codex:loop -- "Audite a finalização de vendas do PDV e corrija os problemas de maior risco"
+```
+
+O loop não faz commit, push, merge ou deploy automaticamente. Consulte [docs/CODEX_LOOP.md](docs/CODEX_LOOP.md) para configuração, limites e exemplos de tarefas.
+
+---
+
 ## 📄 Licença
 
 Este projeto está sob a licença [MIT](LICENSE).
