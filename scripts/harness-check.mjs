@@ -31,6 +31,9 @@ for (const check of checks) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 20 * 1024 * 1024,
+    // No Windows, shims .cmd (ex.: npm.cmd) só executam via shell; sem isto,
+    // spawnSync falha com EINVAL.
+    shell: isWindows,
   });
 
   if (result.stdout) process.stdout.write(result.stdout);

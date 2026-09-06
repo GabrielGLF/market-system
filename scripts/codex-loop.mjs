@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, relative } from "node:path";
 
 const isWindows = process.platform === "win32";
 const bin = (name) => (isWindows ? `${name}.cmd` : name);
@@ -83,6 +83,8 @@ function runSync(cmd, args, options = {}) {
     encoding: "utf8",
     stdio: options.inherit ? "inherit" : ["ignore", "pipe", "pipe"],
     maxBuffer: 20 * 1024 * 1024,
+    // No Windows, shims .cmd (ex.: codex.cmd) só executam via shell.
+    shell: isWindows,
   });
 
   if (result.error) {
@@ -131,8 +133,10 @@ function runCodex(prompt, outputFile, model) {
       "--sandbox",
       "workspace-write",
       "--ephemeral",
+      // Caminho relativo (sem espaços) para o arquivo de saída: com shell no
+      // Windows, um caminho absoluto contendo espaços quebraria o comando.
       "--output-last-message",
-      outputFile,
+      relative(repoRoot, outputFile).replace(/\\/g, "/"),
     ];
 
     if (model) {
@@ -147,6 +151,8 @@ function runCodex(prompt, outputFile, model) {
       cwd: repoRoot,
       stdio: ["pipe", "inherit", "inherit"],
       windowsHide: false,
+      // No Windows, codex.cmd só executa via shell.
+      shell: isWindows,
     });
 
     child.on("error", (error) => {
