@@ -78,7 +78,6 @@ export function StockMovementModal({ isOpen, onClose, product, onSuccess }: Stoc
           newStock,
           reason,
           date: new Date().toISOString(),
-          userId: 'Admin',
           costPrice: prod.costPrice
         });
       });

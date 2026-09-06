@@ -64,7 +64,6 @@ export function PriceHistoryModal({ product, isOpen, onClose }: PriceHistoryModa
                         </span>
                       </div>
                       <div className="text-xs text-gray-400 dark:text-slate-500 mt-2 flex justify-between">
-                        <span>Por: {record.userId}</span>
                         <span>Motivo: {record.reason}</span>
                       </div>
                     </div>

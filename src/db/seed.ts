@@ -1,9 +1,8 @@
 import { db } from './index';
-import { hashPin } from '../utils/auth';
 import { setSyncPaused } from '../utils/sync';
 import type { 
-  Category, Product, StoreSettings, Customer, User, Sale, SaleItem, 
-  CashSession, CashMovement, DebtRecord, StockMovement, PriceHistory 
+  Category, Product, StoreSettings, Customer, Sale, SaleItem,
+  CashSession, CashMovement, DebtRecord, StockMovement, PriceHistory
 } from '../types';
 
 // Helper to generate IDs
@@ -39,8 +38,7 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
       db.debtRecords.clear(),
       db.cashSessions.clear(),
       db.cashMovements.clear(),
-      db.settings.clear(),
-      db.users.clear()
+      db.settings.clear()
     ]);
   }
 
@@ -73,22 +71,7 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
   };
   await db.settings.put(settings);
 
-  // 2. Users (PINs armazenados como hash SHA-256, nunca em texto puro)
-  const adminId = generateId();
-  const managerId = generateId();
-  const cashierId = generateId();
-  const [adminPinHash, managerPinHash, cashierPinHash] = await Promise.all([
-    hashPin('1234'),
-    hashPin('2222'),
-    hashPin('1111')
-  ]);
-  await db.users.bulkPut([
-    { id: adminId, name: 'Administrador', email: 'admin@mercado.com', role: 'ADMIN', pinHash: adminPinHash },
-    { id: managerId, name: 'Gerente', email: 'gerente@mercado.com', role: 'MANAGER', pinHash: managerPinHash },
-    { id: cashierId, name: 'Operador de Caixa', email: 'caixa@mercado.com', role: 'CASHIER', pinHash: cashierPinHash }
-  ]);
-
-  // 3. Categories
+  // 2. Categories
   const categories: Category[] = [
     { id: generateId(), name: 'Bebidas', color: '#3b82f6', icon: 'cup-soda', description: 'Refrigerantes, cervejas, sucos e água' },
     { id: generateId(), name: 'Mercearia', color: '#f59e0b', icon: 'shopping-basket', description: 'Alimentos básicos e enlatados' },
@@ -151,8 +134,6 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
   const currentSession: CashSession = {
     id: generateId(),
     openedAt: sessionOpenedAt.toISOString(),
-    cashierId: cashierId,
-    cashierName: 'Operador de Caixa',
     initialBalance: 150,
     currentBalance: 150,
     totalIn: 150,
@@ -165,7 +146,7 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
 
   // Initial money supply
   const supply: CashMovement = {
-    id: generateId(), sessionId: currentSession.id, type: 'SUPPLY', amount: 150, reason: 'Fundo de troco inicial', date: sessionOpenedAt.toISOString(), cashierName: 'Operador de Caixa'
+    id: generateId(), sessionId: currentSession.id, type: 'SUPPLY', amount: 150, reason: 'Fundo de troco inicial', date: sessionOpenedAt.toISOString()
   };
   await db.cashMovements.put(supply);
 
@@ -188,7 +169,6 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
       newStock: purchaseQty,
       reason: 'Entrada por Nota Fiscal de Compra / Fornecedor',
       date: entryDate.toISOString(),
-      userId: 'Gerente de Compras',
       costPrice: p.costPrice
     });
 
@@ -206,7 +186,6 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
         newStock: Math.max(0, purchaseQty - lossQty),
         reason: 'Avaria / Vencimento / Embalagem Danificada',
         date: lossDate.toISOString(),
-        userId: 'Conferente',
         costPrice: p.costPrice
       });
     }
@@ -229,8 +208,7 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
       newMargin: Number(newMargin.toFixed(1)),
       changePercentage: 10.0,
       reason: 'Reajuste de tabela pelo fornecedor',
-      date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-      userId: 'Admin'
+      date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString()
     });
   });
 
@@ -326,7 +304,6 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
         newStock: 50 - item.quantity,
         reason: `Venda PDV #${saleNum}`,
         date: saleDate.toISOString(),
-        userId: 'Operador de Caixa',
         costPrice: item.costPrice
       });
     });

@@ -63,50 +63,55 @@
 
 ## Push
 
-- Só roda com Supabase configurado **e** sessão de nuvem ativa
-  (`provider: 'server'`). Login local por PIN acumula no outbox e envia depois.
+- Só roda com Supabase configurado **e** a nuvem conectada neste dispositivo
+  (botão "Conectar Nuvem" em Configurações). Sem conexão, o outbox apenas
+  acumula e envia depois.
 - O motor lê o outbox (batch de 500), busca o **estado atual** de cada registro
   e chama o RPC `sync_push(p_rows jsonb)` uma vez por entidade.
 - Sucesso → limpa as entradas do batch; falha → incrementa `attempts`, guarda
   o erro e aplica **backoff exponencial** (5s → 300s, teto).
-- Gatilhos: push imediato ao entrar com a conta; pós-gravação (debounce 5s);
+- Gatilhos: push imediato ao conectar a nuvem; pós-gravação (debounce 5s);
   intervalo de 30s; evento `online`; botão manual em Configurações.
 
 ## Row-Level Security (isolamento por loja)
 
-- `stores` (1 linha por loja) + `store_members(store_id, user_id, role)`.
+- `stores` (1 linha por loja) + `store_members(store_id, user_id)` — vínculo
+  único com o dono (coluna `role` mantida por compatibilidade, sempre 'OWNER').
 - Toda tabela espelho tem política RLS:
   `store_id in (select store_id from store_members where user_id = auth.uid())`
   em `using` **e** `with check` — vale para SELECT e para DML.
-- `sync_push` roda `SECURITY INVOKER`: o `store_id` é **derivado da associação
-  do usuário autenticado** no servidor — o cliente nunca informa (nem consegue
+- `sync_push` roda `SECURITY INVOKER`: o `store_id` é **derivado do vínculo
+  da conta autenticada** no servidor — o cliente nunca informa (nem consegue
   forjar) a qual loja pertence.
-- Operador sem vínculo recebe erro explícito; membros não podem se auto-vincular
+- Conta sem vínculo recebe erro explícito; o vínculo é criado no SQL Editor
   (política de `store_members` só permite ler a própria associação).
 
 ## Configuração
 
 1. Execute `supabase/migrations/0001_cloud_sync.sql` no SQL Editor (uma vez).
-2. Crie a loja e vincule os operadores (SQL no topo da migration, trocando o
-   e-mail):
+2. Crie a loja e vincule o e-mail do dono (SQL no topo da migration):
    ```sql
    insert into public.stores (name) values ('Mercado Central');
    insert into public.store_members (store_id, user_id, role)
-   select s.id, u.id, 'ADMIN'
+   select s.id, u.id, 'OWNER'
    from public.stores s, auth.users u
    where s.name = 'Mercado Central' and u.email = 'dono@loja.com';
    ```
-3. Variáveis `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` já configuradas
-   (mesmo projeto da autenticação).
-4. Operadores entram com a conta (nuvem) — a partir daí o espelho é mantido.
+3. Variáveis `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` já configuradas.
+4. O dono conecta a nuvem em **Configurações → Conectar Nuvem** (link mágico no
+   e-mail) — a partir daí o espelho é mantido automaticamente.
+
+> **Nota:** o sistema é monousuário — não há login no PDV, operadores nem
+> papéis. A conexão com a nuvem existe apenas para autorizar o envio dos dados
+> ao Postgres (a sessão fica no dispositivo).
 
 ## Comportamento em situações reais
 
 | Situação | Comportamento |
 |---|---|
 | Venda com internet caindo | Grava local, entra no outbox; enviada no próximo push |
-| Reabrir o app offline | Sessão local (PIN) segue funcionando; outbox espera |
-| Login local por PIN | Nada é enviado (sem sessão de servidor); aviso em Configurações |
+| Reabrir o app offline | Tudo segue funcionando local; outbox espera |
+| Nuvem não conectada | Nada é enviado; aviso em Configurações |
 | Estorno/devolução parcial | Venda atualizada localmente → upsert do estado novo (refunds[] inclusos) |
 | Restaurar backup | Recria registros → hooks geram PUTs → espelho acompanha a verdade local |
 | Dois dispositivos | Ambos escrevem no MESMO espelho (UUIDs distintos); relatórios locais continuam independentes |

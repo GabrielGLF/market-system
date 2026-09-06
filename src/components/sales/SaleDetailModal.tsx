@@ -129,7 +129,6 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
               newStock,
               reason: `Estorno de Venda #${sale.saleNumber}: ${cancelReason}`,
               date: new Date().toISOString(),
-              userId: 'admin',
               costPrice: item.costPrice
             });
           }
@@ -221,8 +220,8 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
               <span className="font-medium text-slate-800 dark:text-slate-200">{sale.customerName || 'Consumidor Final'}</span>
             </div>
             <div className="bg-gray-50 dark:bg-slate-900/60 p-3 rounded-lg">
-              <span className="text-xs text-gray-500 dark:text-slate-400 block">Operador</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">Caixa 01</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400 block">Caixa</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">Balcão</span>
             </div>
           </div>
 

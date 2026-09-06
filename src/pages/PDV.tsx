@@ -453,7 +453,6 @@ export const PDV: React.FC = () => {
               newStock,
               reason: `Venda PDV #${saleNumber}`,
               date: saleDate,
-              userId: activeSession.cashierName || 'Operador',
               costPrice: p.costPrice
             });
           }

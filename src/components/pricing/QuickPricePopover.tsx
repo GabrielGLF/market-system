@@ -43,8 +43,7 @@ export function QuickPricePopover({ product, onClose, onSaved }: QuickPricePopov
         newMargin: margin,
         changePercentage: product.sellPrice > 0 ? ((sellPrice - product.sellPrice) / product.sellPrice) * 100 : 0,
         date: new Date().toISOString(),
-        reason: 'Edição rápida',
-        userId: 'system'
+        reason: 'Edição rápida'
       });
       onSaved();
     }

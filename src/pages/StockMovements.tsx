@@ -47,7 +47,7 @@ export function StockMovements() {
   const countSales = filteredMovements.filter(m => m.type === 'SALE').reduce((acc, m) => acc + m.quantity, 0);
 
   const exportCSV = () => {
-    const headers = ['Data e Hora', 'Produto', 'Tipo', 'Quantidade', 'Estoque Anterior', 'Novo Estoque', 'Motivo / Justificativa', 'Operador'];
+    const headers = ['Data e Hora', 'Produto', 'Tipo', 'Quantidade', 'Estoque Anterior', 'Novo Estoque', 'Motivo / Justificativa'];
     const rows = filteredMovements.map(m => [
       `"${formatDateTime(m.date)}"`,
       `"${m.productName.replace(/"/g, '""')}"`,
@@ -55,8 +55,7 @@ export function StockMovements() {
       m.quantity,
       m.previousStock,
       m.newStock,
-      `"${m.reason.replace(/"/g, '""')}"`,
-      `"${m.userId || 'Sistema'}"`
+      `"${m.reason.replace(/"/g, '""')}"`
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -193,7 +192,6 @@ export function StockMovements() {
                 <th className="px-4 py-3 text-right">Qtd Movimentada</th>
                 <th className="px-4 py-3 text-center">Estoque Antes → Depois</th>
                 <th className="px-4 py-3">Motivo / Justificativa</th>
-                <th className="px-4 py-3 text-right">Operador</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -246,9 +244,6 @@ export function StockMovements() {
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                         {m.reason}
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs text-slate-400">
-                        {m.userId || 'Sistema'}
                       </td>
                     </tr>
                   );

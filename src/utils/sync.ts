@@ -1,7 +1,7 @@
 import { db } from '../db';
 import type { Table } from 'dexie';
 import type { SyncEntity, SyncOutboxEntry } from '../types';
-import { getSupabaseClient } from './serverAuth';
+import { getSupabaseClient } from './cloudConfig';
 
 /**
  * Motor de sincronização OFFLINE-FIRST (padrão transactional outbox).
@@ -236,7 +236,7 @@ export async function syncNow(): Promise<SyncResult> {
 
   const { data, error: sessionError } = await client.auth.getSession();
   if (sessionError || !data.session) {
-    return { pushed: 0, failed: 0, error: 'Entre com a conta (nuvem) para sincronizar.' };
+    return { pushed: 0, failed: 0, error: 'Conecte a nuvem em Configurações para sincronizar.' };
   }
 
   const pending = await db.syncOutbox.orderBy('updatedAt').limit(SYNC_MAX_BATCH).toArray();

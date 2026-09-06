@@ -54,7 +54,7 @@ export const CashRegister: React.FC = () => {
             Caixa Aberto
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Aberto em {new Date(activeSession.openedAt).toLocaleString()} por {activeSession.cashierName}
+            <Clock className="w-4 h-4" /> Aberto em {new Date(activeSession.openedAt).toLocaleString()}
           </p>
         </div>
         <div className="flex gap-4">

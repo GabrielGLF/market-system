@@ -44,8 +44,7 @@ export const CashMovementModal: React.FC<CashMovementModalProps> = ({ isOpen, on
           type,
           amount: val,
           reason,
-          date: new Date().toISOString(),
-          cashierName: session.cashierName || 'Operador'
+          date: new Date().toISOString()
         });
 
         if (isSupply) {

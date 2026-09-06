@@ -254,7 +254,6 @@ export async function applyPartialReturn(
         newStock,
         reason: `Devolução parcial da venda #${sale.saleNumber}: ${reason}`,
         date: now,
-        userId: 'Admin',
         costPrice: r.costPrice
       });
     }

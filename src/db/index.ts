@@ -1,7 +1,7 @@
 import Dexie, { Table } from 'dexie';
 import { 
   Product, Category, StockMovement, PriceHistory, Sale, Customer, 
-  DebtRecord, CashSession, CashMovement, StoreSettings, User, SyncOutboxEntry
+  DebtRecord, CashSession, CashMovement, StoreSettings, SyncOutboxEntry
 } from '../types';
 
 export class MarketDB extends Dexie {
@@ -15,7 +15,6 @@ export class MarketDB extends Dexie {
   cashSessions!: Table<CashSession, string>;
   cashMovements!: Table<CashMovement, string>;
   settings!: Table<StoreSettings, string>;
-  users!: Table<User, string>;
   syncOutbox!: Table<SyncOutboxEntry, string>;
 
   constructor() {
@@ -36,6 +35,11 @@ export class MarketDB extends Dexie {
     // Aditivo: não toca nas tabelas existentes (nenhuma migração de dados).
     this.version(2).stores({
       syncOutbox: 'id, entity, entityId, updatedAt'
+    });
+    // Sistema monousuário: remove a tabela legada de usuários (com seus papéis
+    // e PINs) — os dados antigos são descartados na atualização do schema.
+    this.version(3).stores({
+      users: null
     });
   }
 }

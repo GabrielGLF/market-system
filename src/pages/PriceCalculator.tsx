@@ -118,8 +118,7 @@ export function PriceCalculator() {
         newMargin: effectiveMargin,
         changePercentage: prod.sellPrice > 0 ? ((newSellPrice - prod.sellPrice) / prod.sellPrice) * 100 : 0,
         date: new Date().toISOString(),
-        reason: 'Calculadora de Precificação',
-        userId: 'Admin'
+        reason: 'Calculadora de Precificação'
       });
 
       toast.success(`Preço do produto "${prod.name}" atualizado para ${formatCurrency(newSellPrice)} com sucesso!`);

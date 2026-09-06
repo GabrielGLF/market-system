@@ -41,7 +41,8 @@ export interface StockMovement {
   newStock: number;
   reason: string;
   date: string;
-  userId: string;
+  /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
+  userId?: string;
   costPrice: number;
 }
 
@@ -58,7 +59,8 @@ export interface PriceHistory {
   changePercentage: number;
   date: string;
   reason: string;
-  userId: string;
+  /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
+  userId?: string;
 }
 
 export type PaymentMethodType = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PIX' | 'VOUCHER' | 'FIADO' | 'SPLIT';
@@ -164,8 +166,10 @@ export interface CashSession {
   id: string;
   openedAt: string;
   closedAt?: string;
-  cashierId: string;
-  cashierName: string;
+  /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
+  cashierId?: string;
+  /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
+  cashierName?: string;
   initialBalance: number;
   currentBalance: number;
   totalIn: number;
@@ -193,7 +197,8 @@ export interface CashMovement {
   amount: number;
   reason: string;
   date: string;
-  cashierName: string;
+  /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
+  cashierName?: string;
 }
 
 export interface StoreSettings {
@@ -223,17 +228,6 @@ export interface StoreSettings {
   defaultCardFeeCreditInstallment: number;
   soundEnabled: boolean;
   lowStockThresholdDefault: number;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'ADMIN' | 'MANAGER' | 'CASHIER';
-  /** PIN em texto puro — legado; novos cadastros usam pinHash */
-  pin?: string;
-  /** Hash SHA-256 do PIN (login local, offline-first) */
-  pinHash?: string;
 }
 
 /** Entidades locais espelhadas na nuvem (Supabase) pelo motor de sync. */

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Wallet } from 'lucide-react';
 import { db } from '../../db';
-import { getSession } from '../../utils/auth';
 
 interface OpenCashModalProps {
   isOpen: boolean;
@@ -11,8 +10,6 @@ interface OpenCashModalProps {
 
 export const OpenCashModal: React.FC<OpenCashModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [initialAmount, setInitialAmount] = useState('0');
-  // Pré-preenche com o operador autenticado (login local)
-  const [cashierName, setCashierName] = useState(() => getSession()?.name || 'Operador 1');
   const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
@@ -32,8 +29,7 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({ isOpen, onClose, o
       await db.cashSessions.add({
         id: crypto.randomUUID(),
         openedAt: new Date().toISOString(),
-        cashierId: '1',
-        cashierName,
+        cashierId: 'local',
         initialBalance: amount,
         currentBalance: amount,
         totalIn: amount,
@@ -64,15 +60,6 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({ isOpen, onClose, o
         </div>
         
         <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Operador</label>
-            <input 
-              type="text" 
-              value={cashierName}
-              onChange={(e) => setCashierName(e.target.value)}
-              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
           <div>
             <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Fundo de Troco (R$)</label>
             <input 

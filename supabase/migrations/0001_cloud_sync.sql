@@ -11,22 +11,22 @@
 --   3. roda com SECURITY INVOKER → as políticas RLS valem dentro da função.
 --
 -- Configuração inicial (uma vez por loja):
---   1. Crie a loja e vincule os operadores (substitua pelo e-mail real):
+--   1. Crie a loja e vincule o dono (substitua pelo e-mail real):
 --
 --      insert into public.stores (name) values ('Mercado Central');
 --      insert into public.store_members (store_id, user_id, role)
---      select s.id, u.id, 'ADMIN'
+--      select s.id, u.id, 'OWNER'
 --      from public.stores s, auth.users u
 --      where s.name = 'Mercado Central' and u.email = 'dono@loja.com';
 --
---   2. O PDV sincroniza automaticamente quando o operador entra com a conta
---      em nuvem (Supabase Auth). Sem isso, nada é enviado.
+--   2. Em Configurações, conecte a nuvem com esse e-mail — o espelho passa a
+--      ser mantido automaticamente.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------------------
--- 1. Inquilino (loja) e associação de operadores
+-- 1. Inquilino (loja) e vínculo do dono
 -- ---------------------------------------------------------------------------
 create table if not exists public.stores (
   id         uuid primary key default gen_random_uuid(),
@@ -37,8 +37,8 @@ create table if not exists public.stores (
 create table if not exists public.store_members (
   store_id   uuid not null references public.stores(id) on delete cascade,
   user_id    uuid not null references auth.users(id) on delete cascade,
-  role       text not null default 'CASHIER'
-             check (role in ('ADMIN','MANAGER','CASHIER')),
+  role       text not null default 'OWNER'
+             check (role in ('OWNER')),
   created_at timestamptz not null default now(),
   primary key (store_id, user_id)
 );
@@ -171,8 +171,8 @@ create policy stores_select_member on public.stores
   for select to authenticated
   using (id in (select store_id from public.store_members where user_id = auth.uid()));
 
--- O operador só lê a própria associação; vínculos são criados pelo dono no SQL
--- Editor (papel postgres, fora do RLS).
+-- O dono só lê a própria associação; vínculos são criados no SQL Editor (papel
+-- postgres, fora do RLS).
 create policy store_members_select_own on public.store_members
   for select to authenticated
   using (user_id = auth.uid());
@@ -236,7 +236,7 @@ begin
   where user_id = auth.uid();
 
   if v_store is null then
-    raise exception 'Operador sem vínculo com loja (tabela store_members).';
+    raise exception 'Conta sem vínculo com a loja (tabela store_members).';
   end if;
 
   for r in select value from jsonb_array_elements(p_rows)

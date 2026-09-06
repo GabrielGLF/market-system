@@ -206,8 +206,7 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
         newMargin: Number(newMargin.toFixed(1)),
         changePercentage: Number(changePercentage.toFixed(2)),
         date: now,
-        reason: 'Atualização de Cadastro',
-        userId: 'Admin'
+        reason: 'Atualização de Cadastro'
       });
     }
 

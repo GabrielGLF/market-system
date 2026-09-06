@@ -27,7 +27,7 @@
 - **Troco Inteligente**: Decomposição automática da menor quantidade de cédulas (R$ 200, 100, 50, 20, 10, 5, 2) e moedas (R$ 1, 0.50, 0.25, 0.10, 0.05, 0.01) para agilizar o caixa.
 - **Múltiplas Formas de Pagamento & Split**: Dinheiro, Cartão de Crédito, Débito, Pix (com QR Code copia e cola), Voucher e Caderneta (Fiado).
 - **Display do Cliente (2ª Tela)**: Janela secundária em pop-up com sincronização em tempo real via `BroadcastChannel`.
-- **Scanner Mobile Pareado**: Pareamento com celular do operador via QR Code ou código de 6 dígitos para usar o smartphone como leitor de código de barras.
+- **Scanner Mobile Pareado**: Pareamento com o celular via QR Code ou código de 6 dígitos para usar o smartphone como leitor de código de barras.
 - **Cupom Não-Fiscal Térmico (80mm e 58mm)**: Impressão direta com layout de bobina térmica e botão de envio de comprovante no WhatsApp.
 
 ### 2. 📦 Gestão de Estoque & Movimentações
@@ -60,7 +60,7 @@
 - Amortização e quitação parcial ou total de débitos com comprovante e extrato.
 - Lembrete de cobrança direto no WhatsApp com chave Pix e saldo devedor.
 
-### 6. 💼 Controle de Caixa & Turnos
+### 6. 💼 Controle de Caixa
 - Abertura de caixa com fundo de troco inicial.
 - Movimentações de Sangria (retirada) e Suprimento (reforço) com justificativa.
 - Fechamento de caixa com contagem física de dinheiro (conferência cega/aberta) e apuração de quebra/sobra.

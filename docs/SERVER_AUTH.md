@@ -1,7 +1,10 @@
-# Autenticação em Nuvem (Supabase) com Fallback Offline
+# Conexão em Nuvem (Supabase)
 
-> Documento de design da autenticação real no servidor do MarketSystem,
-> mantendo o modo offline-first como fallback garantido.
+> **O PDV é monousuário.** Não há login, operadores nem papéis no aplicativo —
+> uma única pessoa usa o sistema. Este documento descreve a conexão opcional
+> com o Supabase, que existe apenas para autorizar o envio de dados ao
+> Postgres (espelho de vendas/estoque/caixa). Detalhes do espelho em
+> `docs/CLOUD_SYNC.md`.
 
 ## Contexto
 
@@ -13,129 +16,54 @@ Vercel** neste projeto.
 Isso é uma decisão de arquitetura deliberada: um PDV de balcão precisa
 funcionar mesmo com a internet caindo no meio de uma venda.
 
-A autenticação em nuvem não substitui essa arquitetura — ela **complementa**:
+A conexão em nuvem não substitui essa arquitetura — ela **complementa**:
 
 | Camada | Papel |
 |---|---|
-| **Supabase Auth** | Validação real de credenciais no servidor (e-mail + senha) |
-| **Login local por PIN** | Fallback offline — o caixa nunca fica preso fora do sistema |
-| **IndexedDB/Dexie** | Dados do negócio, 100% locais (inalterado) |
+| **Supabase Auth** | Autoriza o envio de dados ao Postgres (sessão fica no dispositivo) |
+| **IndexedDB/Dexie** | Dados do negócio, 100% locais — fonte primária, sem login |
 
 ## Como funciona
 
-```
-                    ┌──────────────────────────────────────┐
-                    │           LoginScreen                │
-                    └──────────────┬───────────────────────┘
-                                   │
-              VITE_SUPABASE_URL/KEY │ configurados e online?
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-        ┌──────────────────────┐      ┌──────────────────────┐
-        │  Conta em nuvem      │      │  Acesso local (PIN)  │
-        │  signInWithPassword  │      │  verificação SHA-256 │
-        └──────────┬───────────┘      └──────────┬───────────┘
-                   │                             │
-                   │  espelha usuário            │
-                   │  em `users` (IndexedDB)     │
-                   ▼                             ▼
-        ┌─────────────────────────────────────────────┐
-        │  Sessão: localStorage `marketsystem.session` │
-        │  provider: 'server' | 'local'                │
-        └──────────────────────┬──────────────────────┘
-                               ▼
-                    ┌──────────────────────┐
-                    │  App (gate)          │
-                    │  papel → menus       │
-                    │  logout → ambos      │
-                    └──────────────────────┘
-```
+- O aplicativo abre direto no Dashboard. **Nenhuma tela de login existe.**
+- Em **Configurações → Sincronização com a Nuvem**, o dono pode conectar o
+  espelho (link mágico enviado por e-mail) ou desconectar. Enquanto conectado,
+  o motor de sync mantém o Postgres atualizado; desconectado, nada é enviado
+  e o outbox apenas acumula.
+- A sessão do Supabase é persistida pelo próprio supabase-js no dispositivo
+  (sem relação com o uso local do PDV).
 
-### Fluxo da conta em nuvem (Supabase)
+## O que NÃO existe mais
 
-1. `src/utils/serverAuth.ts` cria o cliente Supabase **lazy** (só quando as
-   variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` existem).
-2. `loginWithServer(email, password)` chama `auth.signInWithPassword`.
-3. Em sucesso, o usuário é **espelhado** na tabela local `users` (mesmo
-   formato que o PDV usa — id do Supabase, papel, nome), e a sessão local é
-   gravada com `provider: 'server'`.
-4. O papel vem de `app_metadata.role` do Supabase; na ausência, reaproveita o
-   papel local; senão assume o mínimo privilégio (`CASHIER`).
-5. Logout encerra a sessão no Supabase (melhor esforço, tolerante a offline)
-   **e** limpa a sessão local.
-
-### Fallback offline
-
-- A seção de conta em nuvem **só aparece** quando as variáveis estão
-  configuradas **e** o navegador está online (`navigator.onLine`).
-- O acesso local por PIN fica **sempre disponível**, com PIN hashado
-  (SHA-256 via Web Crypto) e migração automática de PINs legados.
-- O header mostra o provedor da sessão atual (Nuvem / Local) no menu do usuário.
+- ~~Tela de login~~ / ~~usuários e papéis (ADMIN/MANAGER/CASHIER)~~ /
+  ~~PINs~~ / ~~restrição de menus por papel~~ — tudo removido na migração
+  monousuário (a tabela legada `users` é descartada pelo schema v3 do Dexie).
 
 ## Configuração
 
-### 1. Supabase
-
-1. Crie um projeto em <https://supabase.com>.
-2. Em **Authentication → Providers**, habilite **Email**.
-3. Em **Settings → API**, copie a *Project URL* e a *anon public key*.
-
-### 2. Vercel
-
-1. No dashboard do projeto, **Settings → Environment Variables**, adicione:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-2. Redeploy. Variáveis `VITE_*` são embutidas no build pelo Vite.
-
-### 3. Papéis dos usuários
-
-O sistema lê `app_metadata.role` (`ADMIN` | `MANAGER` | `CASHIER`). Defina no
-painel do Supabase ou via SQL:
-
-```sql
-update auth.users
-set raw_app_meta_data = raw_app_meta_data || '{"role":"CASHIER"}'::jsonb
-where id = '<user-id>';
-```
-
-Sem papel definido, o sistema usa o papel já cadastrado localmente ou assume
-`CASHIER` (menor privilégio — por segurança).
-
-## O que NÃO mudou
-
-- Dados do negócio continuam **100% locais** (IndexedDB). O Supabase autentica
-  apenas; não armazena vendas/estoque/caixa.
-- O login local por PIN continua funcionando sem nenhuma configuração.
-- A tabela `users` local é a fonte de verdade para operadores no PDV (abertura
-  de caixa, movimentações).
+1. Crie um projeto em <https://supabase.com> e habilite **Email** em
+   Authentication → Providers.
+2. No Vercel (**Settings → Environment Variables**), adicione
+   `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` e redeploy (variáveis
+   `VITE_*` são embutidas no build).
+3. Execute `supabase/migrations/0001_cloud_sync.sql` e vincule o e-mail do dono
+   a uma loja (ver `docs/CLOUD_SYNC.md`).
+4. Em Configurações, conecte a nuvem com esse e-mail.
 
 ## Segurança e limitações
 
 | Item | Estado |
 |---|---|
-| Senhas no servidor | Gerenciadas pelo Supabase Auth (bcrypt, MFA disponível) |
-| PINs locais | Hash SHA-256, nunca texto puro (migração automática de legados) |
-| Sessão local | `localStorage` — vulnerável a acesso físico ao dispositivo |
-| Sincronização de dados | **Fora de escopo**: sem Supabase Realtime/Postgres para dados do negócio |
-| Controle de acesso | Por papel na UI (menus) — reforço no servidor exige RLS + backend |
-
-### Evoluções possíveis (fora desta rodada)
-
-1. **Sincronização de dados com Supabase Postgres + RLS** — vendas, estoque e
-   caixa replicados para a nuvem como espelho offline-first — **implementada**;
-   veja `docs/CLOUD_SYNC.md`.
-2. **Sessão server-only** (sem sessão local persistente) — exige requisições
-   autenticadas a um backend, quebrando o offline-first.
-3. **MFA / bloqueio por dispositivo** para operadores de caixa.
+| Dados do negócio | 100% locais (IndexedDB); a nuvem recebe apenas o espelho |
+| Autorização de escrita | RLS por loja no Postgres (`store_members`), store_id derivado no servidor |
+| Sessão do Supabase | Persistida no dispositivo (supabase-js); desconectar em Configurações |
+| Acesso físico ao dispositivo | Quem tem o dispositivo tem os dados — use criptografia de disco do SO |
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---|---|
-| `src/utils/serverAuth.ts` | Cliente Supabase lazy + login/logout em nuvem |
-| `src/utils/auth.ts` | Login local por PIN, hash, sessão (`provider`) |
-| `src/components/auth/LoginScreen.tsx` | UI dos dois fluxos + fallback offline |
-| `src/App.tsx` | Gate de autenticação + logout híbrido |
-| `src/components/layout/Header.tsx` | Badge do provedor da sessão |
-| `.env.example` | Variáveis documentadas |
+| `src/utils/cloudConfig.ts` | Cliente Supabase lazy + `isCloudConfigured` |
+| `src/utils/sync.ts` | Motor de push (verifica a sessão do Supabase antes de enviar) |
+| `src/pages/Settings.tsx` | Card de sincronização: conectar/desconectar a nuvem |
+| `supabase/migrations/0001_cloud_sync.sql` | Espelho, RLS e RPC `sync_push` |
