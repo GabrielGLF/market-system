@@ -287,7 +287,7 @@ export function Inventory() {
                 <tr>
                   <th className="px-4 py-3">Produto</th>
                   <th className="px-4 py-3">Categoria</th>
-                  <th className="px-4 py-3 text-right">Custo</th>
+                  <th className="px-4 py-3 text-right" title="Custo médio ponderado das compras + preço da última compra">Custo Médio</th>
                   <th className="px-4 py-3 text-right">Venda</th>
                   <th className="px-4 py-3 text-center">Estoque</th>
                   <th className="px-4 py-3 text-center">Status</th>
@@ -344,8 +344,16 @@ export function Inventory() {
                           </span>
                         </td>
 
-                        <td className="px-4 py-3 text-right font-medium text-slate-500 dark:text-slate-400">
-                          {formatCurrency(product.costPrice)}
+                        <td className="px-4 py-3 text-right">
+                          <div className="font-medium text-slate-700 dark:text-slate-200 tabular-nums">
+                            {formatCurrency(product.costPrice)}
+                          </div>
+                          {product.lastPurchaseCost != null && (
+                            <div className="text-[10px] text-slate-400 tabular-nums" title={product.lastSupplier ? `Fornecedor: ${product.lastSupplier}` : undefined}>
+                              última compra {formatCurrency(product.lastPurchaseCost)}
+                              {product.lastPurchaseDate && ` · ${product.lastPurchaseDate.slice(0, 10).split('-').reverse().join('/')}`}
+                            </div>
+                          )}
                         </td>
 
                         <td className="px-4 py-3 text-right font-bold text-slate-800 dark:text-white">

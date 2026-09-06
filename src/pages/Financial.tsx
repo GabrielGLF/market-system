@@ -46,8 +46,8 @@ export function Financial() {
     return loadCompletedSalesBetween(periodStartIso(period));
   }, [period]) || [];
 
-  // Só produtos ATIVOS saem do índice (a página nunca usa inativos).
-  const products = useLiveQuery(() => db.products.where('isActive').equals(1).toArray()) || [];
+  // Só produtos ativos (booleano não indexa no IndexedDB — usar filtro cursorial).
+  const products = useLiveQuery(() => db.products.filter(p => p.isActive).toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
 
@@ -138,13 +138,14 @@ export function Financial() {
   const valorTotalEstoqueCusto = activeProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
   const valorTotalEstoqueVenda = activeProducts.reduce((acc, p) => acc + (p.sellPrice * p.stock), 0);
 
-  // Volume de Entradas vs Volume de Saídas
+  // Volume de Entradas vs Volume de Saídas — valor usa totalCost (preço EFETIVAMENTE
+  // pago na compra, gravado pela entrada) com fallback ao custo médio para registros antigos
   const totalEntradasQtd = filteredMovements.filter(m => m.type === 'IN').reduce((acc, m) => acc + m.quantity, 0);
-  const totalEntradasValor = filteredMovements.filter(m => m.type === 'IN').reduce((acc, m) => acc + (m.quantity * (m.costPrice || 0)), 0);
+  const totalEntradasValor = filteredMovements.filter(m => m.type === 'IN').reduce((acc, m) => acc + (m.totalCost ?? (m.quantity * (m.costPrice || 0))), 0);
 
   const totalSaidasVendasQtd = filteredMovements.filter(m => m.type === 'SALE').reduce((acc, m) => acc + m.quantity, 0);
   const totalAvariasPerdasQtd = filteredMovements.filter(m => m.type === 'OUT').reduce((acc, m) => acc + m.quantity, 0);
-  const totalAvariasPerdasValor = filteredMovements.filter(m => m.type === 'OUT').reduce((acc, m) => acc + (m.quantity * (m.costPrice || 0)), 0);
+  const totalAvariasPerdasValor = filteredMovements.filter(m => m.type === 'OUT').reduce((acc, m) => acc + (m.totalCost ?? (m.quantity * (m.costPrice || 0))), 0);
 
   // Taxa de Perda / Avaria (Shrinkage Rate %)
   const taxaAvariaPercent = totalFaturamento > 0 ? (totalAvariasPerdasValor / totalFaturamento) * 100 : 0;
@@ -198,7 +199,7 @@ export function Financial() {
     const entradas = filteredMovements
       .filter(m => m.type === 'IN')
       .filter(m => { const t = new Date(m.date).getTime(); return t >= start && t < end; })
-      .reduce((acc, m) => acc + (m.quantity * (m.costPrice || 0)), 0);
+      .reduce((acc, m) => acc + (m.totalCost ?? (m.quantity * (m.costPrice || 0))), 0);
     const saidas = filteredSales
       .filter(s => { const t = new Date(s.date).getTime(); return t >= start && t < end; })
       .reduce((acc, s) => acc + (s.costTotal || 0), 0);

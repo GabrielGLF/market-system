@@ -4,6 +4,7 @@ export interface Product {
   sku: string;
   barcode: string;
   categoryId: string;
+  /** Custo unitário médio ponderado (atualizado a cada compra pelo motor de custo médio). Base para CMV e margem. */
   costPrice: number;
   sellPrice: number;
   stock: number;
@@ -13,6 +14,12 @@ export interface Product {
   imageUrl?: string;
   isActive: boolean;
   inactiveSince?: string;
+  /** Custo da última compra efetiva (preço pago na entrada mais recente). */
+  lastPurchaseCost?: number;
+  /** Data ISO da última compra efetiva. */
+  lastPurchaseDate?: string;
+  /** Fornecedor da última compra. */
+  lastSupplier?: string;
   createdAt: string;
   updatedAt: string;
   alternativeUnit?: {
@@ -43,7 +50,16 @@ export interface StockMovement {
   date: string;
   /** Legado (sistema monousuário) — mantido por compatibilidade de dados existentes */
   userId?: string;
+  /** Custo unitário de referência no momento da movimentação. Em IN, é o preço de compra desta entrada; em SALE, o custo médio usado na baixa. */
   costPrice: number;
+  /** Custo unitário MÉDIO ponderado APÓS esta movimentação (entradas atualizam; saídas mantêm). Permite auditoria do histórico de custos. */
+  avgCostAfter?: number;
+  /** Valor total da linha (quantity × costPrice) — para relatórios de investimento em compras e perdas. */
+  totalCost?: number;
+  /** Fornecedor informado na entrada de compra (opcional). */
+  supplier?: string;
+  /** Nº da nota/fatura da compra (opcional). */
+  invoiceNumber?: string;
 }
 
 export interface PriceHistory {

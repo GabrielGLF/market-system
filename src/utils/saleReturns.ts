@@ -1,6 +1,7 @@
 import { db } from '../db';
 import type { Sale, SaleItem, SaleRefund, SaleRefundItem, PaymentMethodEntry } from '../types';
 import { toPackUnits } from './calc';
+import { computeWeightedAverageCost } from './inventory';
 
 export interface ReturnRequestItem {
   /** productId do item NA VENDA (pode terminar em '-alt' para frações) */
@@ -237,13 +238,15 @@ export async function applyPartialReturn(
     // put() substitui o registro inteiro com o mesmo id (update() só aceita UpdateSpec)
     await db.sales.put(adjustedSale);
 
-    // 2. Repor estoque com movimentação RETURN auditável
+    // 2. Repor estoque com movimentação RETURN auditável — os itens devolvidos
+    // voltam ao custo médio ponderado pelo custo que SAÍRAM na venda.
     for (const r of restocks) {
       const product = await db.products.get(r.productId);
       if (!product) continue; // produto removido do cadastro: não há estoque para repor
       const previousStock = product.stock;
       const newStock = round3(previousStock + r.quantity);
-      await db.products.update(product.id, { stock: newStock, updatedAt: now });
+      const newAvgCost = computeWeightedAverageCost(previousStock, product.costPrice || 0, r.quantity, r.costPrice);
+      await db.products.update(product.id, { stock: newStock, costPrice: newAvgCost, updatedAt: now });
       await db.stockMovements.add({
         id: crypto.randomUUID(),
         productId: product.id,
@@ -254,7 +257,9 @@ export async function applyPartialReturn(
         newStock,
         reason: `Devolução parcial da venda #${sale.saleNumber}: ${reason}`,
         date: now,
-        costPrice: r.costPrice
+        costPrice: r.costPrice,
+        avgCostAfter: newAvgCost,
+        totalCost: round2(r.quantity * r.costPrice)
       });
     }
 

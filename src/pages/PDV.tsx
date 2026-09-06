@@ -381,8 +381,10 @@ export const PDV: React.FC = () => {
     })();
 
     const saleDate = new Date().toISOString();
-    const costTotal = cart.reduce((acc, item) => acc + (item.costPrice * item.quantity), 0);
-    const profit = Number((total - costTotal).toFixed(2));
+    // CMV e lucro são calculados DENTRO da transação (abaixo), a partir do custo
+    // médio real lido do banco no momento da baixa — imune a corridas com
+    // compras simultâneas que alterem o custo entre a montagem do carrinho e a
+    // confirmação. Por isso o newSale é montado dentro do bloco transacional.
 
     // Troco sai da gaveta: o caixa físico fica com (dinheiro recebido - troco dado)
     const totalPaid = payments.reduce((acc, pm) => acc + pm.amount, 0);
@@ -390,32 +392,45 @@ export const PDV: React.FC = () => {
     const cashAmount = payments.filter(pm => pm.method === 'CASH').reduce((acc, pm) => acc + pm.amount, 0);
     const netCash = Math.max(0, cashAmount - change);
 
-    const newSale: Sale = {
-      id: crypto.randomUUID(),
-      saleNumber,
-      date: saleDate,
-      items: cart,
-      subtotal,
-      discount: globalDiscount,
-      total,
-      costTotal,
-      profit,
-      paymentMethods: payments.map(pm => pm.method === 'CASH'
-        ? { ...pm, details: { receivedAmount: pm.amount, change } }
-        : pm),
-      customerId,
-      customerName,
-      status: 'COMPLETED',
-      cashierSessionId: activeSession.id
-    };
-
     try {
       // Tudo em uma transação atômica: venda + estoque + movimentações + fiado + caixa
-      await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
-        // 1. Gravar Venda
-        await db.sales.add(newSale);
+      const sale: Sale = await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
+        // CMV pelo custo médio REAL lido agora (o mesmo valor usado nas
+        // movimentações SALE abaixo — venda e estoque nunca divergem)
+        let costTotal = 0;
+        for (const item of cart) {
+          const p = await db.products.get(item.productId.replace('-alt', ''));
+          if (!p) {
+            throw new Error(`Produto "${item.productName}" não encontrado no cadastro.`);
+          }
+          costTotal += (p.costPrice || 0) * item.quantity;
+        }
+        costTotal = Number(costTotal.toFixed(2));
+        const profit = Number((total - costTotal).toFixed(2));
 
-        // 2. Baixar estoque e registrar movimentações
+        const sale: Sale = {
+          id: crypto.randomUUID(),
+          saleNumber,
+          date: saleDate,
+          items: cart,
+          subtotal,
+          discount: globalDiscount,
+          total,
+          costTotal,
+          profit,
+          paymentMethods: payments.map(pm => pm.method === 'CASH'
+            ? { ...pm, details: { receivedAmount: pm.amount, change } }
+            : pm),
+          customerId,
+          customerName,
+          status: 'COMPLETED',
+          cashierSessionId: activeSession.id
+        };
+
+        // 1. Gravar Venda
+        await db.sales.add(sale);
+
+        // 2. Baixar estoque e registrar movimentações pelo CUSTO MÉDIO real
         for (const item of cart) {
           const rawProdId = item.productId.replace('-alt', '');
           const p = await db.products.get(rawProdId);
@@ -444,7 +459,9 @@ export const PDV: React.FC = () => {
               newStock,
               reason: `Venda PDV #${saleNumber}`,
               date: saleDate,
-              costPrice: p.costPrice
+              costPrice: p.costPrice,
+              avgCostAfter: p.costPrice,
+              totalCost: Number((p.costPrice * deduction).toFixed(2))
             });
           }
         }
@@ -465,7 +482,7 @@ export const PDV: React.FC = () => {
             await db.debtRecords.add({
               id: crypto.randomUUID(),
               customerId,
-              saleId: newSale.id,
+              saleId: sale.id,
               type: 'DEBIT',
               amount: fiadoPayment.amount,
               previousBalance: prevBalance,
@@ -502,6 +519,8 @@ export const PDV: React.FC = () => {
             expectedCashInDrawer: Number((session.expectedCashInDrawer + netCash).toFixed(2))
           });
         }
+
+        return sale;
       });
 
       // 5. Sucesso, Efeitos & Cupom
@@ -509,7 +528,7 @@ export const PDV: React.FC = () => {
       playSuccess();
       
       setPaymentOpen(false);
-      setLastSale(newSale);
+      setLastSale(sale);
       setReceiptOpen(true);
       
       setCart([]);

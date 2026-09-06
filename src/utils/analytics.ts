@@ -186,9 +186,9 @@ export function loadStockMovementsBetween(fromIso: string, toIso?: string, opts?
   return q.toArray();
 }
 
-/** Produtos ativos direto do índice `isActive` — nunca varre inativos. */
+/** Produtos ativos (filtro cursorial — booleano não é chave indexável no IndexedDB). */
 export function loadActiveProducts(): Promise<Product[]> {
-  return db.products.where('isActive').equals(1).toArray();
+  return db.products.filter(p => p.isActive).toArray();
 }
 
 /** Produtos ativos com estoque <= threshold (alerta de reposição), via índice `stock`. */
@@ -248,7 +248,8 @@ export function aggregateMovementsByType(movements: StockMovement[]): Map<string
   for (const m of movements) {
     const cur = map.get(m.type) || { qty: 0, value: 0 };
     cur.qty += m.quantity;
-    cur.value += m.quantity * (m.costPrice || 0);
+    // totalCost = valor real da linha (preço pago na entrada, custo médio na baixa)
+    cur.value += m.totalCost ?? (m.quantity * (m.costPrice || 0));
     map.set(m.type, cur);
   }
   return map;

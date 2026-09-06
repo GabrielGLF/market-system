@@ -5,7 +5,7 @@ import {
   ArrowRightLeft, Search, Plus, Download, 
   ArrowDownLeft, ArrowUpRight, ShoppingBag, RotateCcw, SlidersHorizontal 
 } from 'lucide-react';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatCurrency } from '../utils/format';
 import { loadStockMovementsBetween, periodStartIso } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
 import { StockMovementModal } from '../components/inventory/StockMovementModal';
@@ -253,7 +253,19 @@ export function StockMovements() {
                         {m.previousStock} → <strong className="text-slate-800 dark:text-white">{m.newStock}</strong>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
-                        {m.reason}
+                        <div>{m.reason}</div>
+                        {(m.type === 'IN' || m.type === 'OUT' || m.type === 'ADJUST' || m.type === 'SALE') && (
+                          <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
+                            {m.type === 'IN' ? 'compra' : 'custo médio'}: {formatCurrency(m.costPrice)}
+                            {' · '}valor: <strong className="text-slate-500 dark:text-slate-400">{formatCurrency(m.totalCost ?? (m.quantity * m.costPrice))}</strong>
+                            {m.type === 'IN' && m.avgCostAfter != null && m.avgCostAfter !== m.costPrice && (
+                              <> · custo médio → {formatCurrency(m.avgCostAfter)}</>
+                            )}
+                          </div>
+                        )}
+                        {m.supplier && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">Fornecedor: {m.supplier}{m.invoiceNumber ? ` · Nota ${m.invoiceNumber}` : ''}</div>
+                        )}
                       </td>
                     </tr>
                   );
