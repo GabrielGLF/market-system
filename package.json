@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "harness:check": "node scripts/harness-check.mjs",
+    "codex:loop": "node scripts/codex-loop.mjs"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
