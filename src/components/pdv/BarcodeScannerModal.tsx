@@ -42,10 +42,10 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({ isOpen
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden w-full max-w-lg relative">
+      <div className="bg-white dark:bg-slate-800 rounded-lg overflow-hidden w-full max-w-lg relative border border-slate-200 dark:border-slate-700">
         <div className="absolute top-4 right-4 z-10">
-          <button onClick={() => { scanner?.stop(); onClose(); }} className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70">
-            <X className="w-6 h-6" />
+          <button onClick={() => { scanner?.stop(); onClose(); }} className="p-2 bg-black/50 text-white rounded-md hover:bg-black/70">
+            <X className="w-5 h-5" />
           </button>
         </div>
         

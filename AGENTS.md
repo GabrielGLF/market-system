@@ -2,6 +2,11 @@
 
 This file defines how coding agents must investigate, change, validate, and finish work in this repository.
 
+## Communication (SEMPRE)
+
+- **Sempre se comunique com o usuário em PORTUGUÊS (pt-BR)** — em todas as respostas, relatórios, resumos e perguntas, em qualquer tarefa ou turno.
+- Código, identificadores e mensagens de commit podem permanecer no padrão existente do repositório, mas a comunicação com o usuário é sempre em português.
+
 ## Product and architecture
 
 MarketSystem is an offline-first Brazilian retail ERP/POS.

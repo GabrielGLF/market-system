@@ -1,6 +1,10 @@
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import {
+  loadCompletedSalesBetween, loadRecentSales,
+  localMidnightIso, localDayIso, dayStartIso, dayEndIso
+} from '../utils/analytics';
 import { 
   TrendingUp, Package, DollarSign, AlertCircle, 
   ShoppingCart, ArrowRight, Wallet, Percent, 
@@ -13,11 +17,17 @@ import {
 
 export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
   const products = useLiveQuery(() => db.products.toArray()) || [];
-  const sales = useLiveQuery(() => db.sales.toArray()) || [];
   const settings = useLiveQuery(() => db.settings.toCollection().first());
 
-  const today = new Date().toISOString().split('T')[0];
-  const todaysSales = sales.filter(s => s.date.startsWith(today) && s.status === 'COMPLETED');
+  // Escalabilidade: só a janela exibida (últimos 7 dias) sai do índice de data.
+  // Antes: o histórico INTEIRO era carregado a cada render só para calcular
+  // "hoje" e o gráfico semanal — com anos de uso, dezenas de milhares de vendas.
+  const sales = useLiveQuery(() => loadCompletedSalesBetween(localMidnightIso(6)), []) || [];
+  const recentSales = useLiveQuery(() => loadRecentSales(5), []) || [];
+
+  // Dia LOCAL (o comércio abre e fecha no fuso da loja; datas são gravadas em UTC).
+  const today = localDayIso();
+  const todaysSales = sales.filter(s => s.date >= localMidnightIso(0));
   
   const todayRevenue = todaysSales.reduce((sum, s) => sum + s.total, 0);
   const todayProfit = todaysSales.reduce((sum, s) => sum + (s.profit || 0), 0);
@@ -29,12 +39,12 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
   const lowStockThreshold = settings?.lowStockThresholdDefault || 5;
   const lowStockProducts = products.filter(p => p.stock <= (p.minStock || lowStockThreshold));
 
-  // Chart data (mocked past 7 days based on today's date)
+  // Janelas diárias por limites ISO locais (meia-noite local), não por prefixo UTC.
   const chartData = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().split('T')[0];
-    const daySales = sales.filter(s => s.date.startsWith(dateStr) && s.status === 'COMPLETED');
+    const dateStr = localDayIso(d);
+    const daySales = sales.filter(s => s.date >= dayStartIso(dateStr) && s.date < dayEndIso(dateStr));
     return {
       name: d.toLocaleDateString('pt-BR', { weekday: 'short' }),
       total: daySales.reduce((sum, s) => sum + s.total, 0)
@@ -219,7 +229,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               </tr>
             </thead>
             <tbody>
-              {sales.slice().reverse().slice(0, 5).map(sale => (
+              {recentSales.map(sale => (
                 <tr key={sale.id} className="border-b border-slate-100 dark:border-slate-700/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors text-sm">
                   <td className="py-3 px-2 text-slate-800 dark:text-slate-200">
                     {new Date(sale.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
@@ -240,7 +250,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
                   </td>
                 </tr>
               ))}
-              {sales.length === 0 && (
+              {recentSales.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-6 text-center text-slate-500 dark:text-slate-400">
                     Nenhuma venda registrada ainda.

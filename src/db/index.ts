@@ -41,6 +41,14 @@ export class MarketDB extends Dexie {
     this.version(3).stores({
       users: null
     });
+    // Escalabilidade: índices adicionais para consultas por janela de data e
+    // busca O(log n) — as telas deixam de varrer tabelas inteiras que crescem
+    // com o histórico (vendas/movimentações). Aditivo: nenhuma migração de dados.
+    this.version(4).stores({
+      products: 'id, barcode, sku, name, categoryId, isActive, updatedAt, stock, alternativeUnit.barcode',
+      sales: 'id, saleNumber, date, customerId, status, cashierSessionId',
+      stockMovements: 'id, productId, type, date'
+    });
   }
 }
 

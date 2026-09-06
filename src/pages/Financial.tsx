@@ -16,6 +16,11 @@ import {
 } from 'recharts';
 import { MetricHelpModal } from '../components/financial/MetricHelpModal';
 import { formatCurrency, formatNumber } from '../utils/format';
+import {
+  loadCompletedSalesBetween, loadStockMovementsBetween, buildCustomerStats,
+  buildSalesVelocity, periodStartIso, localMidnightIso
+} from '../utils/analytics';
+import type { SalesPeriod } from '../utils/analytics';
 import type { Product, Sale, StockMovement, Category, Customer } from '../types';
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#14b8a6', '#f97316'];
@@ -30,40 +35,42 @@ export function Financial() {
   const [custoEnergia, setCustoEnergia] = useState(800);
   const [custoSalarios, setCustoSalarios] = useState(4000);
 
-  const sales = useLiveQuery(() => db.sales.toArray()) || [];
-  const products = useLiveQuery(() => db.products.toArray()) || [];
+  // Escalabilidade: as janelas são resolvidas por consulta INDEXADA no Dexie
+  // (índice `date`), não por filter() em memória sobre a tabela inteira. Com
+  // anos de histórico, o custo acompanha o período exibido — não o banco todo.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const sales = useLiveQuery(() => {
+    if (period === 'all') {
+      return db.sales.filter(s => s.status === 'COMPLETED').toArray();
+    }
+    return loadCompletedSalesBetween(periodStartIso(period));
+  }, [period]) || [];
+
+  // Só produtos ATIVOS saem do índice (a página nunca usa inativos).
+  const products = useLiveQuery(() => db.products.where('isActive').equals(1).toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
-  const stockMovements = useLiveQuery(() => db.stockMovements.toArray()) || [];
 
-  // Filtragem de vendas por período
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const stockMovements = useLiveQuery(() => {
+    if (period === 'all') {
+      return db.stockMovements.toArray();
+    }
+    return loadStockMovementsBetween(periodStartIso(period));
+  }, [period]) || [];
 
-  const filteredSales = sales.filter(s => {
-    if (s.status !== 'COMPLETED') return false;
-    const saleDate = new Date(s.date);
-    if (period === 'today') return s.date.slice(0, 10) === todayStr;
-    if (period === '7d') return saleDate >= sevenDaysAgo;
-    if (period === '30d') return saleDate >= thirtyDaysAgo;
-    if (period === 'month') return saleDate >= startOfMonth;
-    if (period === 'year') return saleDate >= startOfYear;
-    return true;
-  });
+  // Alias de compatibilidade: daqui para baixo a página consome apenas concluídas.
+  const filteredSales = sales;
+  const filteredMovements = stockMovements;
 
-  const filteredMovements = stockMovements.filter(m => {
-    const mDate = new Date(m.date);
-    if (period === 'today') return m.date.slice(0, 10) === todayStr;
-    if (period === '7d') return mDate >= sevenDaysAgo;
-    if (period === '30d') return mDate >= thirtyDaysAgo;
-    if (period === 'month') return mDate >= startOfMonth;
-    if (period === 'year') return mDate >= startOfYear;
-    return true;
-  });
+  // Estatísticas por cliente em UMA passada O(vendas) via índice customerId —
+  // antes: para cada cliente, um filter() sobre TODO o histórico (O(clientes × vendas)).
+  const customerStats = useLiveQuery(() => buildCustomerStats(), []) || null;
+
+  // Velocidade de venda (30 dias) pré-agregada em UMA consulta indexada e UMA
+  // passada — antes: um filter() do histórico completo POR PRODUTO (O(produtos × vendas)).
+  const velocity30dMap = useLiveQuery(() =>
+    loadCompletedSalesBetween(localMidnightIso(29)).then(buildSalesVelocity)
+  , []) || new Map();
 
   // --- 1. KPIs FINANCEIROS & GERAIS ---
   const totalFaturamento = filteredSales.reduce((acc, s) => acc + s.total, 0);
@@ -110,9 +117,12 @@ export function Financial() {
     .filter(([_, value]) => value > 0)
     .map(([name, value]) => ({ name, value: Math.round(value) }));
 
-  // Projeção Mensal
-  const currentMonthSales = sales.filter(s => s.status === 'COMPLETED' && new Date(s.date) >= startOfMonth);
+  // Projeção Mensal — janela do mês via índice de data, sem varrer o histórico.
+  const currentMonthSales = useLiveQuery(() =>
+    loadCompletedSalesBetween(periodStartIso('month'))
+  , [todayStr]) || [];
   const currentMonthRevenue = currentMonthSales.reduce((acc, s) => acc + s.total, 0);
+  const now = new Date();
   const currentDayOfMonth = Math.max(1, now.getDate());
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const projecaoMensal = (currentMonthRevenue / currentDayOfMonth) * daysInMonth;
@@ -149,19 +159,9 @@ export function Financial() {
     // Vendas do produto nos últimos 30 dias — soma TODOS os itens da venda que
     // casam com o produto (antes usava find(), perdendo vendas com o mesmo
     // produto em mais de uma linha, ex.: pacote + avulso no mesmo cupom).
-    const productSales30d = sales.filter(s => s.status === 'COMPLETED' && new Date(s.date) >= thirtyDaysAgo)
-      .reduce((sum, s) => {
-        const qty = s.items
-          .filter(i => i.productId === p.id || i.productId === `${p.id}-alt`)
-          .reduce((acc, item) => {
-            // Converte frações vendidas (ex: cigarro avulso) para a unidade do
-            // pacote, senão a autonomia mistura unidades incomparáveis.
-            return acc + (item.isAlternativeUnit && item.originalUnitFactor
-              ? item.quantity / item.originalUnitFactor
-              : item.quantity);
-          }, 0);
-        return sum + qty;
-      }, 0);
+    // Velocidade 30d vem pré-agregada (uma passada sobre a janela de 30 dias,
+    // via índice de data) — antes re-filtrava TODO o histórico para cada produto.
+    const productSales30d = velocity30dMap.get(p.id) || 0;
 
     const mediaDiariaVendas = productSales30d / 30;
     const diasAutonomia = mediaDiariaVendas > 0 ? Math.round(p.stock / mediaDiariaVendas) : (p.stock > 0 ? 999 : 0);
@@ -331,14 +331,13 @@ export function Financial() {
 
   const topCustomers = [...customers]
     .map(c => {
-      // Só vendas CONCLUÍDAS contam para o histórico de compras do cliente
-      // (antes incluía canceladas/estornadas, inflando o valor do cliente).
-      const customerSales = sales.filter(s => s.customerId === c.id && s.status === 'COMPLETED');
-      const totalPurchased = customerSales.reduce((acc, s) => acc + s.total, 0);
+      // Estatísticas pré-agregadas em uma passada (buildCustomerStats) —
+      // só vendas CONCLUÍDAS contam para o histórico do cliente.
+      const stats = customerStats?.get(c.id);
       return {
         ...c,
-        totalPurchased,
-        salesCount: customerSales.length
+        totalPurchased: stats?.totalPurchased || 0,
+        salesCount: stats?.salesCount || 0
       };
     })
     .sort((a, b) => b.totalPurchased - a.totalPurchased);

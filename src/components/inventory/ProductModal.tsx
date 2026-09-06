@@ -80,14 +80,21 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
   useEffect(() => {
     if (!currentProd && (formData.name || formData.sku || formData.barcode)) {
       const checkInactive = async () => {
-        const found = await db.products.filter(p => 
-          !p.isActive && 
-          Boolean(
-            (formData.name && p.name.toLowerCase() === formData.name.toLowerCase()) ||
-            (formData.sku && p.sku === formData.sku) ||
-            (formData.barcode && p.barcode === formData.barcode)
-          )
-        ).first();
+        // Dedup via índices (barcode/sku/name) — O(log n) por lookup.
+        // Antes: filter() varria a tabela inteira a cada 400ms de digitação.
+        let found: Product | undefined;
+        if (formData.barcode) {
+          found = await db.products.where('barcode').equals(formData.barcode)
+            .and(p => !p.isActive).first();
+        }
+        if (!found && formData.sku) {
+          found = await db.products.where('sku').equals(formData.sku)
+            .and(p => !p.isActive).first();
+        }
+        if (!found && formData.name) {
+          found = await db.products.where('name').equalsIgnoreCase(formData.name)
+            .and(p => !p.isActive).first();
+        }
         setInactiveFound(found || null);
       };
       const timer = setTimeout(checkInactive, 400);

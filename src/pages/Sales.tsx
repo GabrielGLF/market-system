@@ -12,6 +12,7 @@ import { SaleDetailModal } from '../components/sales/SaleDetailModal';
 import { generateSalesPdf } from '../utils/salesPdf';
 import type { Sale } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
+import { loadSalesBetween, periodStartIso } from '../utils/analytics';
 
 export function Sales() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,13 +21,18 @@ export function Sales() {
   const [methodFilter, setMethodFilter] = useState<string>('ALL');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
-  const sales = useLiveQuery(() => db.sales.orderBy('date').reverse().toArray()) || [];
+  // Escalabilidade: a janela do período sai do índice `date` (mais recente
+  // primeiro); só o período explícito "Todas as Vendas" materializa o histórico
+  // inteiro (necessário para o filtro de status funcionar sobre tudo).
+  const sales = useLiveQuery(() => {
+    if (period === 'all') {
+      return db.sales.toArray();
+    }
+    return loadSalesBetween(periodStartIso(period), undefined, { desc: true });
+  }, [period]) || [];
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const filteredSales = sales.filter(s => {
     // Search
@@ -47,12 +53,9 @@ export function Sales() {
       if (!hasMethod) return false;
     }
 
-    // Period
-    const saleDate = new Date(s.date);
+    // Period: a janela já veio do índice de data; 'today' só precisa do
+    // limite superior (dia local ≠ dia UTC).
     if (period === 'today' && s.date.slice(0, 10) !== todayStr) return false;
-    if (period === '7d' && saleDate < sevenDaysAgo) return false;
-    if (period === '30d' && saleDate < thirtyDaysAgo) return false;
-    if (period === 'month' && saleDate < startOfMonth) return false;
 
     return true;
   });

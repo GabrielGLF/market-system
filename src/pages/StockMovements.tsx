@@ -6,16 +6,26 @@ import {
   ArrowDownLeft, ArrowUpRight, ShoppingBag, RotateCcw, SlidersHorizontal 
 } from 'lucide-react';
 import { formatDateTime } from '../utils/format';
+import { loadStockMovementsBetween, periodStartIso } from '../utils/analytics';
+import type { SalesPeriod } from '../utils/analytics';
 import { StockMovementModal } from '../components/inventory/StockMovementModal';
 import type { StockMovement } from '../types';
 
 export function StockMovements() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [period, setPeriod] = useState<string>('30d');
+  const [period, setPeriod] = useState<SalesPeriod>('30d');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const movements = useLiveQuery(() => db.stockMovements.orderBy('date').reverse().toArray()) || [];
+  // Escalabilidade: a janela do período sai do índice `date`. Antes: a tabela
+  // INTEIRA de movimentações era materializada (cada venda gera 1+ movimento —
+  // é a tabela que mais cresce no sistema) mesmo com filtro de 7 dias.
+  const movements = useLiveQuery(() => {
+    if (period === 'all') {
+      return db.stockMovements.orderBy('date').reverse().toArray();
+    }
+    return loadStockMovementsBetween(periodStartIso(period), undefined, { desc: true });
+  }, [period]) || [];
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -170,7 +180,7 @@ export function StockMovements() {
 
             <select
               value={period}
-              onChange={e => setPeriod(e.target.value)}
+              onChange={e => setPeriod(e.target.value as SalesPeriod)}
               className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="today">Hoje</option>
