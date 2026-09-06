@@ -1,5 +1,6 @@
 import { db } from '../db';
 import type { Product } from '../types';
+import { normalizeText } from './format';
 
 /**
  * Motor de busca do PDV, desenhado para catálogos grandes.
@@ -59,8 +60,8 @@ async function revalidate(): Promise<void> {
 function toDoc(p: Product): SearchDoc {
   return {
     id: p.id,
-    nameLower: (p.name || '').toLowerCase(),
-    skuLower: (p.sku || '').toLowerCase(),
+    nameLower: normalizeText(p.name || ''),
+    skuLower: normalizeText(p.sku || ''),
     barcode: p.barcode || '',
     altBarcode: p.alternativeUnit?.barcode || '',
     categoryId: p.categoryId || '',
@@ -94,7 +95,7 @@ export async function searchProducts(
   await revalidate();
 
   const trimmed = term.trim();
-  const lower = trimmed.toLowerCase();
+  const lower = normalizeText(trimmed);
 
   // Código de barras/SKU exato: caminho rápido via índice, sem varredura.
   if (lower && /^\d{6,}$/.test(trimmed)) {

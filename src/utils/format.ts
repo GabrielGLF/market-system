@@ -1,3 +1,14 @@
+/**
+ * Normaliza texto para busca: minúsculas sem acentos/diacríticos.
+ * "Pão Francês" → "pao frances" — permite que "pao" encontre "Pão".
+ */
+export function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 export function formatCurrency(val: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',

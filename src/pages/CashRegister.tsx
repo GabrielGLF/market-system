@@ -61,7 +61,7 @@ export const CashRegister: React.FC = () => {
           <button onClick={() => setMovementType('BLEED')} className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400 font-semibold rounded-lg hover:bg-red-200 flex items-center gap-2">
             <TrendingDown className="w-4 h-4" /> Sangria
           </button>
-          <button onClick={() => setMovementType('SUPPLY')} className="px-4 py-2 bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 font-semibold rounded-lg hover:bg-blue-200 flex items-center gap-2">
+          <button onClick={() => setMovementType('SUPPLY')} className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2">
             <TrendingUp className="w-4 h-4" /> Suprimento
           </button>
           <button onClick={() => setCloserOpen(true)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-black">
@@ -118,7 +118,7 @@ export const CashRegister: React.FC = () => {
                 <tr key={m.id} className="border-b border-slate-50 dark:border-slate-700/50">
                   <td className="py-3 text-slate-600 dark:text-slate-400">{new Date(m.date).toLocaleTimeString()}</td>
                   <td className="py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${m.type === 'SUPPLY' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400' : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'}`}>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${m.type === 'SUPPLY' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'}`}>
                       {m.type === 'SUPPLY' ? 'Suprimento' : 'Sangria'}
                     </span>
                   </td>

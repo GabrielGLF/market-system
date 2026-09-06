@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { Product, Category } from '../types';
 import { Search, Tags, History, TrendingUp, Percent, DollarSign, AlertTriangle } from 'lucide-react';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatNumber } from '../utils/format';
 import { calculateMargin, calculateMarkup } from '../utils/calc';
 import { QuickPricePopover } from '../components/pricing/QuickPricePopover';
 import { PriceHistoryModal } from '../components/pricing/PriceHistoryModal';
@@ -60,7 +60,7 @@ export function Pricing() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Tags className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+            <Tags className="w-7 h-7 text-slate-500 dark:text-slate-300" />
             Gestão & Análise de Precificação
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -189,13 +189,7 @@ export function Pricing() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <span 
-                          className="px-2.5 py-1 rounded-full text-xs font-semibold"
-                          style={{
-                            backgroundColor: cat?.color ? `${cat.color}20` : '#f1f5f9',
-                            color: cat?.color || '#64748b'
-                          }}
-                        >
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300">
                           {cat?.name || 'Geral'}
                         </span>
                       </td>
@@ -254,7 +248,7 @@ export function Pricing() {
                             ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' 
                             : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
                         }`}>
-                          {p.stock} {p.unit}
+                          {formatNumber(p.stock)} {p.unit}
                         </span>
                       </td>
 

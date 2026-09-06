@@ -5,7 +5,7 @@ import {
   ArrowRightLeft, Search, Plus, Download, 
   ArrowDownLeft, ArrowUpRight, ShoppingBag, RotateCcw, SlidersHorizontal 
 } from 'lucide-react';
-import { formatDateTime, formatCurrency } from '../utils/format';
+import { formatDateTime, formatCurrency, formatNumber } from '../utils/format';
 import { loadStockMovementsBetween, periodStartIso } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
 import { StockMovementModal } from '../components/inventory/StockMovementModal';
@@ -92,7 +92,7 @@ export function StockMovements() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <ArrowRightLeft className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+            <ArrowRightLeft className="w-7 h-7 text-slate-500 dark:text-slate-300" />
             Histórico de Movimentações de Estoque
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -123,36 +123,36 @@ export function StockMovements() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Entradas / Compras</span>
-            <span className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <ArrowDownLeft className="w-4 h-4" />
             </span>
           </div>
           <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-2">
-            +{countIn.toFixed(0)} <span className="text-xs font-normal text-slate-400">unidades</span>
+            +{formatNumber(countIn, 0)} <span className="text-xs font-normal text-slate-400">unidades</span>
           </p>
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Baixas por Vendas (PDV)</span>
-            <span className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <ShoppingBag className="w-4 h-4" />
             </span>
           </div>
           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-2">
-            -{countSales.toFixed(0)} <span className="text-xs font-normal text-slate-400">unidades</span>
+            -{formatNumber(countSales, 0)} <span className="text-xs font-normal text-slate-400">unidades</span>
           </p>
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Saídas Avulsas / Avarias</span>
-            <span className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <ArrowUpRight className="w-4 h-4" />
             </span>
           </div>
           <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-2">
-            -{countOut.toFixed(0)} <span className="text-xs font-normal text-slate-400">unidades</span>
+            -{formatNumber(countOut, 0)} <span className="text-xs font-normal text-slate-400">unidades</span>
           </p>
         </div>
       </div>
@@ -221,24 +221,19 @@ export function StockMovements() {
                 </tr>
               ) : (
                 pageItems(filteredMovements).map(m => {
-                  let badgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+                  const badgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
                   let label: string = m.type;
 
                   if (m.type === 'IN') {
-                    badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300';
-                    label = '➕ Entrada';
+                    label = 'Entrada';
                   } else if (m.type === 'OUT') {
-                    badgeColor = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
-                    label = '➖ Saída Avulsa';
+                    label = 'Saída Avulsa';
                   } else if (m.type === 'SALE') {
-                    badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
-                    label = '🛒 Venda PDV';
+                    label = 'Venda PDV';
                   } else if (m.type === 'ADJUST') {
-                    badgeColor = 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300';
-                    label = '⚖️ Ajuste Balanço';
+                    label = 'Ajuste Balanço';
                   } else if (m.type === 'RETURN') {
-                    badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-                    label = '↩️ Devolução';
+                    label = 'Devolução';
                   }
 
                   return (
@@ -255,10 +250,10 @@ export function StockMovements() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-slate-800 dark:text-slate-200">
-                        {m.type === 'IN' || m.type === 'RETURN' ? `+${m.quantity}` : `-${m.quantity}`}
+                        {m.type === 'IN' || m.type === 'RETURN' ? `+${formatNumber(m.quantity)}` : `-${formatNumber(m.quantity)}`}
                       </td>
                       <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
-                        {m.previousStock} → <strong className="text-slate-800 dark:text-white">{m.newStock}</strong>
+                        {formatNumber(m.previousStock)} → <strong className="text-slate-800 dark:text-white">{formatNumber(m.newStock)}</strong>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                         <div>{m.reason}</div>

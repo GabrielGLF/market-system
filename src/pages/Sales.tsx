@@ -11,9 +11,10 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { SaleDetailModal } from '../components/sales/SaleDetailModal';
 import { generateSalesPdf } from '../utils/salesPdf';
 import type { Sale } from '../types';
-import { formatCurrency, formatDateTime } from '../utils/format';
+import { formatCurrency, formatDateTime, formatNumber } from '../utils/format';
 import { loadSalesBetween, periodStartIso } from '../utils/analytics';
 import { usePagination } from '../components/common/Pagination';
+import { chartTooltip } from '../utils/chart';
 
 export function Sales() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -123,7 +124,7 @@ export function Sales() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <ShoppingBag className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+            <ShoppingBag className="w-7 h-7 text-slate-500 dark:text-slate-300" />
             Histórico & Gestão de Vendas
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -154,7 +155,7 @@ export function Sales() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Faturamento</span>
-            <span className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <DollarSign className="w-4 h-4" />
             </span>
           </div>
@@ -167,7 +168,7 @@ export function Sales() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Lucro Bruto</span>
-            <span className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <TrendingUp className="w-4 h-4" />
             </span>
           </div>
@@ -182,7 +183,7 @@ export function Sales() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Total de Vendas</span>
-            <span className="p-2 bg-violet-50 dark:bg-violet-950/40 text-violet-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <ShoppingBag className="w-4 h-4" />
             </span>
           </div>
@@ -195,7 +196,7 @@ export function Sales() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Ticket Médio</span>
-            <span className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <Calendar className="w-4 h-4" />
             </span>
           </div>
@@ -208,15 +209,15 @@ export function Sales() {
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase">Itens Vendidos</span>
-            <span className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-lg">
+            <span className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <Clock className="w-4 h-4" />
             </span>
           </div>
           <p className="text-2xl font-bold text-slate-800 dark:text-white mt-2">
-            {totalItens} <span className="text-xs font-normal text-slate-400">un</span>
+            {formatNumber(totalItens)} <span className="text-xs font-normal text-slate-400">un</span>
           </p>
           <span className="text-xs text-slate-400">
-            Média {(completedSales.length > 0 ? totalItens / completedSales.length : 0).toFixed(1)} itens/venda
+            Média {formatNumber(completedSales.length > 0 ? totalItens / completedSales.length : 0, 1)} itens/venda
           </span>
         </div>
       </div>
@@ -233,9 +234,9 @@ export function Sales() {
               <XAxis dataKey="hour" stroke="#94a3b8" fontSize={11} tickLine={false} />
               <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} tickFormatter={(val: number) => `R$${val}`} />
               <Tooltip 
+                {...chartTooltip}
                 formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Faturamento']}
                 labelFormatter={(label) => `Horário: ${label}`}
-                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', color: '#fff' }}
               />
               <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -347,13 +348,13 @@ export function Sales() {
                               key={idx}
                               className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                             >
-                              {m.method === 'PIX' && '📱 Pix'}
-                              {m.method === 'CASH' && '💵 Dinheiro'}
-                              {m.method === 'CREDIT_CARD' && '💳 Crédito'}
-                              {m.method === 'DEBIT_CARD' && '💳 Débito'}
-                              {m.method === 'FIADO' && '📒 Fiado'}
-                              {m.method === 'VOUCHER' && '🎫 Vale'}
-                              {m.method === 'SPLIT' && '🔀 Dividido'}
+                              {m.method === 'PIX' && 'Pix'}
+                              {m.method === 'CASH' && 'Dinheiro'}
+                              {m.method === 'CREDIT_CARD' && 'Crédito'}
+                              {m.method === 'DEBIT_CARD' && 'Débito'}
+                              {m.method === 'FIADO' && 'Fiado'}
+                              {m.method === 'VOUCHER' && 'Vale'}
+                              {m.method === 'SPLIT' && 'Dividido'}
                             </span>
                           ))}
                         </div>

@@ -22,9 +22,10 @@ import {
   buildSalesVelocity, periodStartIso, localMidnightIso
 } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
+import { chartTooltip, CHART_PALETTE } from '../utils/chart';
 import type { Product, Sale, StockMovement, Category, Customer } from '../types';
 
-const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#14b8a6', '#f97316'];
+const CHART_NEUTRAL = '#64748b';
 
 export function Financial() {
   const [activeTab, setActiveTab] = useState<'financial' | 'inventory_flow' | 'abc_profit' | 'cross_sell' | 'customer_credit'>('financial');
@@ -527,9 +528,9 @@ export function Financial() {
                 <ShoppingBag className="w-4 h-4 text-amber-600" /> Itens por Cesta (UPT)
               </span>
               <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">
-                {basketSizeMedio.toFixed(1)} <span className="text-xs font-normal text-slate-400">un/venda</span>
+                {formatNumber(basketSizeMedio, 1)}
               </p>
-              <span className="text-xs text-slate-400">{totalItensVendidos.toFixed(0)} itens no período</span>
+              <span className="text-xs text-slate-400">{formatNumber(totalItensVendidos, 0)} itens no período</span>
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 relative">
@@ -558,9 +559,9 @@ export function Financial() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                     <XAxis dataKey="name" fontSize={11} stroke="#94a3b8" tickLine={false} axisLine={false} />
                     <YAxis fontSize={11} stroke="#94a3b8" tickLine={false} axisLine={false} tickFormatter={(v) => `R$${v}`} />
-                    <Tooltip formatter={(val: any) => [formatCurrency(Number(val || 0)), '']} />
-                    <Area type="monotone" dataKey="faturamento" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} name="Faturamento" />
-                    <Area type="monotone" dataKey="lucro" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Lucro Bruto" />
+                    <Tooltip {...chartTooltip} formatter={(val: any) => [formatCurrency(Number(val || 0)), '']} />
+                    <Area type="monotone" dataKey="faturamento" stroke="#10b981" fill="#10b981" fillOpacity={0.2} name="Faturamento" />
+                    <Area type="monotone" dataKey="lucro" stroke="#047857" fill="#047857" fillOpacity={0.3} name="Lucro Bruto" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -579,17 +580,17 @@ export function Financial() {
                     <PieChart>
                       <Pie data={dataPie} innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value">
                         {dataPie.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v: any) => [formatCurrency(Number(v || 0)), 'Valor']} />
+                      <Tooltip {...chartTooltip} formatter={(v: any) => [formatCurrency(Number(v || 0)), 'Valor']} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="flex flex-wrap gap-2 justify-center text-xs">
                   {dataPie.map((item, idx) => (
                     <span key={idx} className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_PALETTE[idx % CHART_PALETTE.length] }} />
                       {item.name}
                     </span>
                   ))}
@@ -674,10 +675,12 @@ export function Financial() {
                       <tr key={row.day}>
                         <td className="p-1 font-bold text-slate-700 dark:text-slate-300">{row.day}</td>
                         {row.hours.map((val, idx) => {
-                          let colorClass = 'bg-slate-100 dark:bg-slate-700/50 text-slate-400';
-                          if (val > 10) colorClass = 'bg-rose-500 text-white font-bold';
-                          else if (val > 5) colorClass = 'bg-orange-400 text-white font-bold';
-                          else if (val > 2) colorClass = 'bg-amber-300 text-amber-900 font-medium';
+                          // Intensidade em tons de verde (fundo escuro = pico);
+                          // texto sempre legível sobre o próprio tom.
+                          let colorClass = 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-400';
+                          if (val > 10) colorClass = 'bg-emerald-700 text-white font-bold';
+                          else if (val > 5) colorClass = 'bg-emerald-500 text-white font-bold';
+                          else if (val > 2) colorClass = 'bg-emerald-300 text-emerald-900 font-medium';
                           else if (val > 0) colorClass = 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300';
 
                           return (
@@ -764,10 +767,10 @@ export function Financial() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
                     <XAxis dataKey="name" fontSize={11} stroke="#94a3b8" />
                     <YAxis fontSize={11} stroke="#94a3b8" tickFormatter={v => `R$${v}`} />
-                    <Tooltip formatter={(val: any) => [formatCurrency(Number(val || 0)), '']} />
+                    <Tooltip {...chartTooltip} formatter={(val: any) => [formatCurrency(Number(val || 0)), '']} />
                     <Legend />
                     <Bar dataKey="entradas" fill="#10b981" name="Entradas por Compras (R$)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="saidas" fill="#3b82f6" name="Saídas por Vendas/CMV (R$)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="saidas" fill="#64748b" name="Saídas por Vendas/CMV (R$)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -783,17 +786,17 @@ export function Financial() {
                 <div className="space-y-3 text-xs">
                   <div className="flex justify-between p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50">
                     <span className="font-semibold text-emerald-800 dark:text-emerald-300">Total Comprado / Entradas:</span>
-                    <strong className="text-emerald-900 dark:text-emerald-200">+{totalEntradasQtd.toFixed(0)} un ({formatCurrency(totalEntradasValor)})</strong>
+                    <strong className="text-emerald-900 dark:text-emerald-200">+{formatNumber(totalEntradasQtd, 0)} un ({formatCurrency(totalEntradasValor)})</strong>
                   </div>
 
                   <div className="flex justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
                     <span className="font-semibold text-blue-800 dark:text-blue-300">Baixado por Vendas:</span>
-                    <strong className="text-blue-900 dark:text-blue-200">-{totalSaidasVendasQtd.toFixed(0)} un ({formatCurrency(custoMercadoriasVendidas)})</strong>
+                    <strong className="text-blue-900 dark:text-blue-200">-{formatNumber(totalSaidasVendasQtd, 0)} un ({formatCurrency(custoMercadoriasVendidas)})</strong>
                   </div>
 
                   <div className="flex justify-between p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50">
                     <span className="font-semibold text-rose-800 dark:text-rose-300">Avarias e Descartes:</span>
-                    <strong className="text-rose-900 dark:text-rose-200">-{totalAvariasPerdasQtd.toFixed(0)} un ({formatCurrency(totalAvariasPerdasValor)})</strong>
+                    <strong className="text-rose-900 dark:text-rose-200">-{formatNumber(totalAvariasPerdasQtd, 0)} un ({formatCurrency(totalAvariasPerdasValor)})</strong>
                   </div>
                 </div>
               </div>
@@ -834,19 +837,19 @@ export function Financial() {
                     <tr key={item.product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-semibold text-slate-800 dark:text-white">{item.product.name}</span>
-                        <span className="text-[10px] text-slate-400 block font-mono">Min: {item.product.minStock} {item.product.unit}</span>
+                        <span className="text-[10px] text-slate-400 block font-mono">Min: {formatNumber(item.product.minStock)} {item.product.unit}</span>
                       </td>
 
                       <td className="px-4 py-3 text-right font-bold text-slate-800 dark:text-slate-200">
-                        {item.product.stock} {item.product.unit}
+                        {formatNumber(item.product.stock)} {item.product.unit}
                       </td>
 
                       <td className="px-4 py-3 text-right font-medium">
-                        {item.vendas30d} {item.product.unit}
+                        {formatNumber(item.vendas30d)} {item.product.unit}
                       </td>
 
                       <td className="px-4 py-3 text-right font-mono">
-                        {item.mediaDiaria}/dia
+                        {formatNumber(item.mediaDiaria, 3)}/dia
                       </td>
 
                       <td className="px-4 py-3 text-center font-bold">
@@ -860,13 +863,13 @@ export function Financial() {
                             : item.statusAutonomia === 'WARNING'
                             ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                             : item.statusAutonomia === 'EXCESS'
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                            ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
                             : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                         }`}>
-                          {item.statusAutonomia === 'CRITICAL' && '🚨 Crítico (<3d)'}
-                          {item.statusAutonomia === 'WARNING' && '⚠️ Atenção (3-7d)'}
-                          {item.statusAutonomia === 'HEALTHY' && '✅ Saudável'}
-                          {item.statusAutonomia === 'EXCESS' && '💤 Parado (>45d)'}
+                          {item.statusAutonomia === 'CRITICAL' && 'Crítico (<3d)'}
+                          {item.statusAutonomia === 'WARNING' && 'Atenção (3-7d)'}
+                          {item.statusAutonomia === 'HEALTHY' && 'Saudável'}
+                          {item.statusAutonomia === 'EXCESS' && 'Parado (>45d)'}
                         </span>
                       </td>
 
@@ -940,9 +943,9 @@ export function Financial() {
                     <XAxis dataKey="name" fontSize={11} stroke="#94a3b8" />
                     <YAxis yAxisId="left" fontSize={11} stroke="#94a3b8" tickFormatter={v => `R$${v}`} />
                     <YAxis yAxisId="right" orientation="right" fontSize={11} stroke="#94a3b8" tickFormatter={v => `${v}%`} domain={[0, 100]} />
-                    <Tooltip formatter={(v: any) => [`${v}`, '']} />
-                    <Bar yAxisId="left" dataKey="vendas" fill="#8b5cf6" name="Vendas (R$)" radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#f59e0b" strokeWidth={3} name="% Acumulado" dot={{ r: 4 }} />
+                    <Tooltip {...chartTooltip} formatter={(v: any) => [`${v}`, '']} />
+                    <Bar yAxisId="left" dataKey="vendas" fill="#10b981" name="Vendas (R$)" radius={[4, 4, 0, 0]} />
+                    <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#0f172a" strokeWidth={3} name="% Acumulado" dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -989,7 +992,7 @@ export function Financial() {
                       </td>
 
                       <td className="px-4 py-3 text-right font-medium">
-                        {item.qty} un
+                        {formatNumber(item.qty)} un
                       </td>
 
                       <td className="px-4 py-3 text-right font-bold text-slate-800 dark:text-slate-200">

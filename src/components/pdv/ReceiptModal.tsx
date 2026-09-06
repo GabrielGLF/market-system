@@ -2,7 +2,7 @@ import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { X, Printer, Share2, ShoppingBag, Check, Repeat } from 'lucide-react';
-import { formatCurrency, formatDateTime } from '../../utils/format';
+import { formatCurrency, formatDateTime, formatNumber } from '../../utils/format';
 import type { Sale } from '../../types';
 import { requestRepeatSale } from '../../utils/repeatSale';
 
@@ -33,7 +33,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sal
     if (sale.customerName) text += `Cliente: ${sale.customerName}\n`;
     text += `------------------------------\n`;
     sale.items.forEach(item => {
-      text += `${item.quantity}x ${item.productName} - ${formatCurrency(item.total)}\n`;
+      text += `${formatNumber(item.quantity)}x ${item.productName} - ${formatCurrency(item.total)}\n`;
     });
     text += `------------------------------\n`;
     if (sale.discount > 0) text += `Desconto: -${formatCurrency(sale.discount)}\n`;
@@ -109,7 +109,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, sal
             <tbody>
               {sale.items.map((item, idx) => (
                 <tr key={idx} className="border-b border-slate-100">
-                  <td className="py-1 align-top">{item.quantity}</td>
+                  <td className="py-1 align-top">{formatNumber(item.quantity)}</td>
                   <td className="py-1 align-top pr-1">{item.productName}</td>
                   <td className="text-right py-1 align-top">{formatCurrency(item.unitPrice)}</td>
                   <td className="text-right py-1 align-top font-bold">{formatCurrency(item.total)}</td>

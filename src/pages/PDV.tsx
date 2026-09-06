@@ -5,7 +5,7 @@ import {
   Search, Trash2, Camera, MonitorSmartphone,
   Smartphone, Minus, Plus, X, Package, Receipt, Check
 } from 'lucide-react';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatNumber } from '../utils/format';
 import { toPackUnits } from '../utils/calc';
 import type { SaleItem, Product, PaymentMethodEntry, Sale } from '../types';
 import { PaymentModal } from '../components/pdv/PaymentModal';
@@ -170,7 +170,7 @@ export const PDV: React.FC = () => {
       // Aviso de estoque (a validação final continua na finalização da venda)
       const needed = toPackUnits(item.quantity, isAlternative ? product.alternativeUnit?.factor : undefined);
       if (needed > product.stock + 0.0001) {
-        warnings.push(`"${product.name}": estoque insuficiente para repetir (disponível ${product.stock} ${product.unit}, necessário ${needed.toFixed(3)}).`);
+        warnings.push(`"${product.name}": estoque insuficiente para repetir (disponível ${formatNumber(product.stock)} ${product.unit}, necessário ${formatNumber(needed)}).`);
       }
     }
 
@@ -186,7 +186,7 @@ export const PDV: React.FC = () => {
         const idx = next.findIndex(i => i.productId === newItem.productId);
         if (idx >= 0) {
           const existing = next[idx];
-          const qty = existing.quantity + newItem.quantity;
+          const qty = Number((existing.quantity + newItem.quantity).toFixed(3));
           const sub = existing.unitPrice * qty;
           next[idx] = { ...existing, quantity: qty, subtotal: sub, total: Math.max(0, sub - existing.discount) };
         } else {
@@ -236,6 +236,11 @@ export const PDV: React.FC = () => {
   const addToCart = (product: Product, quantity = 1, isAlternative = false) => {
     playBeep();
 
+    // Frações (kg) somadas em float acumulam lixo binário (ex.: 3.6180000000000003).
+    // 3 casas bastam para balcão (g = 0,001 kg) e mantêm o cupom legível.
+    // eslint-disable-next-line no-param-reassign
+    quantity = Number(quantity.toFixed(3));
+
     const unitName = isAlternative ? product.alternativeUnit!.name : product.unit;
     const unitPrice = isAlternative ? product.alternativeUnit!.price : product.sellPrice;
     const costPrice = isAlternative ? (product.costPrice / (product.alternativeUnit?.factor || 1)) : product.costPrice;
@@ -246,7 +251,7 @@ export const PDV: React.FC = () => {
     setCart(prev => {
       const existing = prev.find(item => item.productId === cartItemId);
       if (existing) {
-        const newQty = existing.quantity + quantity;
+        const newQty = Number((existing.quantity + quantity).toFixed(3));
         const itemSub = existing.unitPrice * newQty;
         return prev.map(item => 
           item.productId === cartItemId
@@ -280,11 +285,12 @@ export const PDV: React.FC = () => {
     }
     setCart(prev => prev.map(item => {
       if (item.productId === cartItemId) {
-        const itemSub = item.unitPrice * qty;
+        const normQty = Number(qty.toFixed(3));
+        const itemSub = item.unitPrice * normQty;
         return { 
           ...item, 
-          quantity: qty, 
-          subtotal: itemSub, 
+          quantity: normQty,
+          subtotal: itemSub,
           total: Math.max(0, itemSub - item.discount) 
         };
       }
@@ -362,7 +368,7 @@ export const PDV: React.FC = () => {
 
     const outOfStock = Array.from(stockNeeded.values()).filter(s => s.needed > s.available + 0.0001);
     if (outOfStock.length > 0) {
-      const list = outOfStock.map(s => `"${s.name}" (necessário ${s.needed.toFixed(3)}, disponível ${s.available.toFixed(3)})`).join(', ');
+      const list = outOfStock.map(s => `"${s.name}" (necessário ${formatNumber(s.needed)}, disponível ${formatNumber(s.available)})`).join(', ');
       toast.error(`Estoque insuficiente: ${list}`);
       return;
     }
@@ -667,7 +673,7 @@ export const PDV: React.FC = () => {
                           ? 'text-amber-600 dark:text-amber-400 font-semibold'
                           : 'text-slate-400 dark:text-slate-500'
                       }`}>
-                        {isOut ? 'sem estoque' : `${product.stock} ${product.unit}`}
+                        {isOut ? 'sem estoque' : `${formatNumber(product.stock)} ${product.unit}`}
                       </span>
                     </div>
                   </div>
@@ -689,7 +695,7 @@ export const PDV: React.FC = () => {
             Cupom em andamento
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-            {cart.reduce((sum, item) => sum + item.quantity, 0)} {cart.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
+            {formatNumber(cart.reduce((sum, item) => sum + item.quantity, 0))} {cart.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
           </span>
         </div>
 
@@ -729,7 +735,7 @@ export const PDV: React.FC = () => {
                       <Minus className="w-3 h-3"/>
                     </button>
                     <span className="w-8 text-center font-semibold text-xs text-slate-800 dark:text-white tabular-nums">
-                      {item.quantity}
+                      {formatNumber(item.quantity)}
                     </span>
                     <button 
                       onClick={() => updateQuantity(item.productId, item.quantity + 1)} 

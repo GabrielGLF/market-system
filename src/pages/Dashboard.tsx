@@ -1,6 +1,8 @@
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
+import { formatNumber } from '../utils/format';
+import { chartTooltip } from '../utils/chart';
 import {
   loadCompletedSalesBetween, loadRecentSales,
   localMidnightIso, localDayIso, dayStartIso, dayEndIso
@@ -79,7 +81,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Vendas Hoje</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{formatCurrency(todayRevenue)}</h3>
             </div>
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
@@ -97,7 +99,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Margem Média Hoje</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{todayMargin.toFixed(1)}%</h3>
             </div>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <Percent className="w-5 h-5" />
             </div>
           </div>
@@ -113,7 +115,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Valor em Estoque</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{formatCurrency(totalCost)}</h3>
             </div>
-            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <Wallet className="w-5 h-5" />
             </div>
           </div>
@@ -129,7 +131,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total de Produtos</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{products.length}</h3>
             </div>
-            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
               <Package className="w-5 h-5" />
             </div>
           </div>
@@ -164,8 +166,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `R$ ${value}`} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  itemStyle={{ color: '#10b981' }}
+                  {...chartTooltip}
                   formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Faturamento']}
                 />
                 <Area type="monotone" dataKey="total" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
@@ -198,7 +199,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
                   </div>
                   <div className="text-right whitespace-nowrap">
                     <p className={`font-bold ${p.stock <= 0 ? 'text-red-500' : 'text-orange-500'}`}>
-                      {p.stock} <span className="text-xs font-normal">{p.unit}</span>
+                      {formatNumber(p.stock)} <span className="text-xs font-normal">{p.unit}</span>
                     </p>
                   </div>
                 </div>
@@ -235,7 +236,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
                     {new Date(sale.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
                   </td>
                   <td className="py-3 px-2 text-slate-800 dark:text-slate-200 font-mono text-xs">{sale.saleNumber}</td>
-                  <td className="py-3 px-2 text-slate-600 dark:text-slate-400">{sale.items.reduce((s, i) => s + i.quantity, 0)} unid</td>
+                  <td className="py-3 px-2 text-slate-600 dark:text-slate-400">{formatNumber(sale.items.reduce((s, i) => s + i.quantity, 0))} unid</td>
                   <td className="py-3 px-2">
                     <div className="flex gap-1">
                       {sale.paymentMethods.map((pm, i) => (

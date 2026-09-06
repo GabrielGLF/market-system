@@ -16,7 +16,7 @@ export const MetricHelpModal: React.FC<MetricHelpModalProps> = ({ title, definit
         <button onClick={onClose} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200"><X size={20} /></button>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg dark:bg-blue-950/60 dark:text-blue-400"><HelpCircle size={24} /></div>
+            <div className="p-2 bg-slate-100 text-slate-600 rounded-lg dark:bg-slate-700/60 dark:text-slate-300"><HelpCircle size={24} /></div>
             <h3 className="text-xl font-bold text-gray-800 dark:text-slate-100">{title}</h3>
           </div>
           

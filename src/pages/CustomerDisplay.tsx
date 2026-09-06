@@ -1,7 +1,7 @@
 import React from 'react';
 import { useCustomerDisplay } from '../hooks/useCustomerDisplay';
 import { ShoppingCart, QrCode, CheckCircle2, Store } from 'lucide-react';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatNumber } from '../utils/format';
 
 export const CustomerDisplay: React.FC = () => {
   const { state } = useCustomerDisplay(true);
@@ -54,7 +54,7 @@ export const CustomerDisplay: React.FC = () => {
                   <td className="py-4">
                     <div className="font-semibold text-slate-800">{item.productName}</div>
                   </td>
-                  <td className="py-4 text-right">{item.quantity} {item.unit}</td>
+                  <td className="py-4 text-right">{formatNumber(item.quantity)} {item.unit}</td>
                   <td className="py-4 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
                   <td className="py-4 text-right font-bold text-slate-800">{formatCurrency(item.total)}</td>
                 </tr>

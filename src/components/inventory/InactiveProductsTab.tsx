@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../db';
 import type { Product } from '../../types';
 import { RefreshCw, Trash2, AlertCircle, Sparkles } from 'lucide-react';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatNumber } from '../../utils/format';
 import { toast } from 'sonner';
 
 interface InactiveProductsTabProps {
@@ -101,7 +101,7 @@ export function InactiveProductsTab({ onReactivate, onProductReactivated }: Inac
                     {formatCurrency(product.sellPrice)}
                   </td>
                   <td className="px-4 py-3 text-center text-xs font-semibold text-rose-500">
-                    {product.stock} {product.unit}
+                    {formatNumber(product.stock)} {product.unit}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">

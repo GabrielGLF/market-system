@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { requestRepeatSale } from '../../utils/repeatSale';
 import { ReceiptModal } from '../pdv/ReceiptModal';
 import { toPackUnits } from '../../utils/calc';
+import { formatNumber, formatCurrency } from '../../utils/format';
 import { computePartialReturn, applyPartialReturn, ReturnRequestItem } from '../../utils/saleReturns';
 import { toast } from 'sonner';
 
@@ -245,7 +246,7 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
                   return (
                     <tr key={idx} className="border-t dark:border-slate-700">
                       <td className="px-4 py-2">{item.productName}</td>
-                      <td className="px-4 py-2 text-right">{item.quantity} {item.unit}</td>
+                      <td className="px-4 py-2 text-right">{formatNumber(item.quantity)} {item.unit}</td>
                       <td className="px-4 py-2 text-right">R$ {item.unitPrice.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right">R$ {item.costPrice.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right text-red-500">{item.discount > 0 ? `- R$ ${item.discount.toFixed(2)}` : '-'}</td>
@@ -348,7 +349,7 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.productName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Disponível: {item.quantity} {item.unit} · Valor: R$ {item.total.toFixed(2)}
+                        Disponível: {formatNumber(item.quantity)} {item.unit} · Valor: {formatCurrency(item.total)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
