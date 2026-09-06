@@ -67,9 +67,22 @@ export async function loginWithServer(email: string, password: string): Promise<
     throw new Error('Autenticação em nuvem não configurada. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
   }
 
-  const { data, error } = await c.auth.signInWithPassword({ email, password });
+  const { data, error } = await c.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password
+  });
   if (error) {
-    throw new Error(error.message || 'Falha ao entrar com a conta.');
+    const message = error.message.toLowerCase();
+    if (message.includes('email not confirmed')) {
+      throw new Error('Confirme seu e-mail antes de entrar.');
+    }
+    if (message.includes('rate limit') || message.includes('too many')) {
+      throw new Error('Muitas tentativas. Aguarde alguns instantes e tente novamente.');
+    }
+    if (message.includes('invalid login credentials')) {
+      throw new Error('E-mail ou senha inválidos.');
+    }
+    throw new Error('Não foi possível concluir o login agora. Tente novamente.');
   }
   const su = data.user;
   if (!su) {

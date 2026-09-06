@@ -127,7 +127,7 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
                 Entrar com a conta (nuvem)
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Validação no Supabase Auth — senha da conta do sistema.
+                Validação segura pelo Supabase Auth. Use a senha da sua conta.
               </p>
             </div>
             <form onSubmit={handleServerSubmit} className="p-5 space-y-4">
