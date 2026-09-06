@@ -61,6 +61,38 @@ export async function logoutServer(): Promise<void> {
  * Papel: usa `app_metadata.role` do Supabase se existir; senão reaproveita o
  * papel já cadastrado localmente; senão assume o mínimo privilégio (CASHIER).
  */
+export async function signUpWithServer(email: string, password: string, name: string): Promise<string> {
+  const c = getSupabaseClient();
+  if (!c) {
+    throw new Error('Autenticação em nuvem não configurada.');
+  }
+  const normalized = email.trim().toLowerCase();
+  const { data, error } = await c.auth.signUp({
+    email: normalized,
+    password,
+    options: {
+      data: { name },
+      emailRedirectTo: typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback`
+        : undefined
+    }
+  });
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes('already registered') || message.includes('already exists')) {
+      throw new Error('Não foi possível criar a conta com esses dados.');
+    }
+    if (message.includes('password')) throw new Error('A senha deve ter pelo menos 6 caracteres.');
+    if (message.includes('rate limit') || message.includes('too many')) {
+      throw new Error('Muitas tentativas. Aguarde alguns instantes e tente novamente.');
+    }
+    throw new Error('Não foi possível criar a conta agora. Tente novamente.');
+  }
+  return data.session
+    ? 'Conta criada. Você já pode entrar.'
+    : 'Conta criada. Confirme seu e-mail antes de entrar.';
+}
+
 export async function loginWithServer(email: string, password: string): Promise<User> {
   const c = getSupabaseClient();
   if (!c) {

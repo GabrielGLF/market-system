@@ -6,7 +6,7 @@ import {
   WifiOff, Cloud, ShieldCheck
 } from 'lucide-react';
 import { login } from '../../utils/auth';
-import { isServerAuthConfigured, loginWithServer } from '../../utils/serverAuth';
+import { isServerAuthConfigured, loginWithServer, signUpWithServer } from '../../utils/serverAuth';
 import type { User } from '../../types';
 
 interface LoginScreenProps {
@@ -27,6 +27,8 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [password, setPassword] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -89,6 +91,26 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
     }
   };
 
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountName.trim() || !email.trim() || password.length < 6) {
+      setServerError('Informe seu nome, um e-mail válido e uma senha com pelo menos 6 caracteres.');
+      return;
+    }
+    setServerError('');
+    setIsServerLoading(true);
+    try {
+      const message = await signUpWithServer(email, password, accountName.trim());
+      setServerError(message);
+      setIsSignUp(false);
+      setPassword('');
+    } catch (err) {
+      setServerError(err instanceof Error ? err.message : 'Não foi possível criar a conta.');
+    } finally {
+      setIsServerLoading(false);
+    }
+  };
+
   const quickSelect = (u: User) => {
     setEmail(u.email);
     setError('');
@@ -124,13 +146,26 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
               <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Cloud className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                Entrar com a conta (nuvem)
+                {isSignUp ? 'Criar conta na nuvem' : 'Entrar com a conta (nuvem)'}
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Validação segura pelo Supabase Auth. Use a senha da sua conta.
               </p>
             </div>
-            <form onSubmit={handleServerSubmit} className="p-5 space-y-4">
+            <form onSubmit={isSignUp ? handleSignUpSubmit : handleServerSubmit} className="p-5 space-y-4">
+              {isSignUp && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase mb-1.5">Nome</label>
+                  <input
+                    type="text"
+                    autoComplete="name"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    placeholder="Nome do responsável"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase mb-1.5">E-mail</label>
                 <div className="relative">
@@ -179,7 +214,14 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all"
               >
                 <LogIn className="w-4 h-4" />
-                {isServerLoading ? 'Verificando...' : 'Entrar com a conta'}
+                {isServerLoading ? 'Aguarde...' : isSignUp ? 'Criar minha conta' : 'Entrar com a conta'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsSignUp((value) => !value); setServerError(''); }}
+                className="w-full text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {isSignUp ? 'Já tenho uma conta — entrar' : 'Ainda não tenho conta — criar agora'}
               </button>
             </form>
           </div>
