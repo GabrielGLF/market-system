@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { QrCode, Smartphone, Wifi, WifiOff } from 'lucide-react';
 import { playBeep } from '../utils/audio';
@@ -9,6 +9,9 @@ export const MobileScanner: React.FC = () => {
   const [scannedItems, setScannedItems] = useState<{barcode: string, time: Date}[]>([]);
   const [scanner, setScanner] = useState<Html5Qrcode | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+
+  // Dedup de leituras: ref fora do setState para evitar efeitos colaterais no updater
+  const lastScanRef = useRef<{ barcode: string; time: number } | null>(null);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -60,25 +63,25 @@ export const MobileScanner: React.FC = () => {
 
   const handleScan = (barcode: string) => {
     // Prevent double scans within 1.5 seconds
-    setScannedItems(prev => {
-      const last = prev[0];
-      if (last && last.barcode === barcode && (new Date().getTime() - last.time.getTime() < 1500)) {
-        return prev;
-      }
-      
-      // Notify PDV
-      const bc = new BroadcastChannel('market-mobile-scanner');
-      bc.postMessage({ type: 'BARCODE_SCANNED', barcode, pairingCode });
-      bc.close();
-      
-      // Feedback
-      playBeep();
-      if (navigator.vibrate) {
-        navigator.vibrate(100);
-      }
-      
-      return [{ barcode, time: new Date() }, ...prev].slice(0, 5);
-    });
+    const now = Date.now();
+    const last = lastScanRef.current;
+    if (last && last.barcode === barcode && (now - last.time < 1500)) {
+      return;
+    }
+    lastScanRef.current = { barcode, time: now };
+
+    // Notify PDV
+    const bc = new BroadcastChannel('market-mobile-scanner');
+    bc.postMessage({ type: 'BARCODE_SCANNED', barcode, pairingCode });
+    bc.close();
+
+    // Feedback
+    playBeep();
+    if (navigator.vibrate) {
+      navigator.vibrate(100);
+    }
+
+    setScannedItems(prev => [{ barcode, time: new Date() }, ...prev].slice(0, 5));
   };
 
   if (!isPaired) {

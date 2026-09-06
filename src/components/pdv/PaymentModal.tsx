@@ -73,9 +73,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         toast.error('Selecione um cliente para registrar na caderneta (fiado).');
         return;
       }
-      const newDebt = (selectedCustomer.debtBalance || 0) + amount;
+      // Considera o valor de fiado JÁ inserido nesta venda, senão o limite
+      // poderia ser estourado somando vários lançamentos no mesmo cupom.
+      const fiadoAlreadyAdded = payments
+        .filter(p => p.method === 'FIADO')
+        .reduce((acc, p) => acc + p.amount, 0);
+      const newDebt = (selectedCustomer.debtBalance || 0) + fiadoAlreadyAdded + amount;
       if (newDebt > selectedCustomer.creditLimit) {
-        toast.error(`Limite de crédito excedido! Limite: ${formatCurrency(selectedCustomer.creditLimit)}, Dívida atual: ${formatCurrency(selectedCustomer.debtBalance)}.`);
+        toast.error(`Limite de crédito excedido! Limite: ${formatCurrency(selectedCustomer.creditLimit)}, Dívida atual: ${formatCurrency(selectedCustomer.debtBalance + fiadoAlreadyAdded)}.`);
         return;
       }
     }

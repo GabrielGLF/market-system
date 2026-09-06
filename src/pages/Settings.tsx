@@ -4,7 +4,7 @@ import { db } from '../db';
 import { Settings as SettingsIcon, Save, Database, Download, Upload, RefreshCw, Store, CreditCard, Bell, MapPin, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { seedDatabase } from '../db/seed';
-import { exportDatabaseToJson, importDatabaseFromJson } from '../utils/export';
+import { exportDatabaseToJson, importDatabaseFromJson, downloadJson } from '../utils/export';
 import type { StoreSettings } from '../types';
 
 export function Settings() {
@@ -91,7 +91,10 @@ export function Settings() {
 
   const handleExportBackup = async () => {
     try {
-      await exportDatabaseToJson();
+      // Antes: o JSON era gerado e descartado — nenhum arquivo era baixado.
+      const json = await exportDatabaseToJson();
+      const filename = `backup_marketsystem_${new Date().toISOString().slice(0, 10)}.json`;
+      downloadJson(json, filename);
       toast.success('Backup exportado com sucesso!');
     } catch (err) {
       toast.error('Erro ao exportar backup.');

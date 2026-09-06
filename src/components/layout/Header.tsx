@@ -3,17 +3,20 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { 
   Menu, Wifi, WifiOff, Sun, Moon, Monitor, 
-  Keyboard, User, ShoppingCart, Wallet, ChevronDown, Check 
+  Keyboard, User, ShoppingCart, Wallet, ChevronDown, Check, 
+  PanelLeftClose, PanelLeftOpen 
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface HeaderProps {
   onOpenSidebar: () => void;
+  onToggleSidebar: () => void;
+  sidebarCollapsed: boolean;
   onOpenShortcuts: () => void;
   onNavigate: (view: string) => void;
 }
 
-export function Header({ onOpenSidebar, onOpenShortcuts, onNavigate }: HeaderProps) {
+export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpenShortcuts, onNavigate }: HeaderProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     return (localStorage.getItem('theme') as any) || 'system';
@@ -21,7 +24,17 @@ export function Header({ onOpenSidebar, onOpenShortcuts, onNavigate }: HeaderPro
 
   const [activeUser, setActiveUser] = useState<{ name: string; role: 'ADMIN' | 'MANAGER' | 'CASHIER' }>(() => {
     const saved = localStorage.getItem('market_active_user');
-    return saved ? JSON.parse(saved) : { name: 'Admin Principal', role: 'ADMIN' };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.name === 'string' && parsed.role) {
+          return parsed;
+        }
+      } catch {
+        // localStorage corrompido: ignora e usa o padrão
+      }
+    }
+    return { name: 'Admin Principal', role: 'ADMIN' };
   });
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -78,6 +91,15 @@ export function Header({ onOpenSidebar, onOpenShortcuts, onNavigate }: HeaderPro
           className="lg:hidden p-2 mr-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
         >
           <Menu className="w-5 h-5" />
+        </button>
+        
+        {/* Colapsar / Expandir barra lateral (desktop) */}
+        <button
+          onClick={onToggleSidebar}
+          className="hidden lg:flex p-2 mr-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
+          title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
         
         <div className="hidden sm:flex items-center ml-2 space-x-2">

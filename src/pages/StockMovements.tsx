@@ -226,7 +226,7 @@ export function StockMovements() {
                   }
 
                   return (
-                    <tr key={m.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors">
+                    <tr key={m.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3 text-xs text-slate-500 font-mono">
                         {formatDateTime(m.date)}
                       </td>

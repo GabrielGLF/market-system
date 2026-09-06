@@ -35,8 +35,8 @@ export const MobileScannerModal: React.FC<MobileScannerModalProps> = ({ isOpen, 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
           <X className="w-6 h-6" />
         </button>
         
@@ -44,14 +44,14 @@ export const MobileScannerModal: React.FC<MobileScannerModalProps> = ({ isOpen, 
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Smartphone className="w-8 h-8 text-blue-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Parear Celular</h2>
-          <p className="text-slate-500 mb-8">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Parear Celular</h2>
+          <p className="text-slate-500 dark:text-slate-400 mb-8">
             Use seu celular como leitor de código de barras. Acesse o link ou digite o código abaixo.
           </p>
 
-          <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-6">
-            <div className="text-sm font-semibold text-slate-500 mb-2 uppercase tracking-wider">Código de Pareamento</div>
-            <div className="text-5xl font-bold tracking-widest text-slate-800 font-mono">
+          <div className="bg-slate-50 dark:bg-slate-900/60 p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
+            <div className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Código de Pareamento</div>
+            <div className="text-5xl font-bold tracking-widest text-slate-800 dark:text-white font-mono">
               {pairingCode}
             </div>
           </div>

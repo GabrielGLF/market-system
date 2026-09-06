@@ -150,7 +150,13 @@ export function Financial() {
     const productSales30d = sales.filter(s => s.status === 'COMPLETED' && new Date(s.date) >= thirtyDaysAgo)
       .reduce((sum, s) => {
         const item = s.items.find(i => i.productId.startsWith(p.id));
-        return sum + (item ? item.quantity : 0);
+        if (!item) return sum;
+        // Converte frações vendidas (ex: cigarro avulso) para a unidade do pacote,
+        // senão a autonomia mistura unidades incomparáveis (fração vs estoque).
+        const qty = item.isAlternativeUnit && item.originalUnitFactor
+          ? item.quantity / item.originalUnitFactor
+          : item.quantity;
+        return sum + qty;
       }, 0);
 
     const mediaDiariaVendas = productSales30d / 30;
@@ -180,13 +186,22 @@ export function Financial() {
   const warningAutonomyCount = productAnalyticsList.filter(item => item.statusAutonomia === 'WARNING').length;
   const excessAutonomyCount = productAnalyticsList.filter(item => item.statusAutonomia === 'EXCESS').length;
 
-  // Fluxo Comparativo Semanal (Entradas vs Saídas)
-  const inflowOutflowData = [
-    { name: 'Semana 1', entradas: Math.round(totalEntradasValor * 0.28), saidas: Math.round(custoMercadoriasVendidas * 0.22) },
-    { name: 'Semana 2', entradas: Math.round(totalEntradasValor * 0.22), saidas: Math.round(custoMercadoriasVendidas * 0.25) },
-    { name: 'Semana 3', entradas: Math.round(totalEntradasValor * 0.32), saidas: Math.round(custoMercadoriasVendidas * 0.28) },
-    { name: 'Semana 4', entradas: Math.round(totalEntradasValor * 0.18), saidas: Math.round(custoMercadoriasVendidas * 0.25) },
-  ];
+  // Fluxo Comparativo Semanal (Entradas vs Saídas) — dados reais por semana
+  // (antes: percentuais fixos inventados, apresentados como se fossem dados reais)
+  const inflowOutflowData = Array.from({ length: 4 }, (_, i) => {
+    const end = Date.now() - i * 7 * 24 * 60 * 60 * 1000;
+    const start = end - 7 * 24 * 60 * 60 * 1000;
+    const entradas = filteredMovements
+      .filter(m => m.type === 'IN')
+      .filter(m => { const t = new Date(m.date).getTime(); return t >= start && t < end; })
+      .reduce((acc, m) => acc + (m.quantity * (m.costPrice || 0)), 0);
+    const saidas = filteredSales
+      .filter(s => { const t = new Date(s.date).getTime(); return t >= start && t < end; })
+      .reduce((acc, s) => acc + (s.costTotal || 0), 0);
+    const labelStart = new Date(start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const labelEnd = new Date(end - 1).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    return { name: `${labelStart} - ${labelEnd}`, entradas: Math.round(entradas), saidas: Math.round(saidas) };
+  });
 
   // --- 4. CURVA ABC & RENTABILIDADE POR PRODUTO / CATEGORIA ---
   const productRevenueMap = new Map<string, { name: string; revenue: number; profit: number; qty: number; categoryId?: string }>();
@@ -806,7 +821,7 @@ export function Financial() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {productAnalyticsList.map(item => (
-                    <tr key={item.product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors">
+                    <tr key={item.product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-semibold text-slate-800 dark:text-white">{item.product.name}</span>
                         <span className="text-[10px] text-slate-400 block font-mono">Min: {item.product.minStock} {item.product.unit}</span>
@@ -947,7 +962,7 @@ export function Financial() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {abcData.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors">
+                    <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3 text-center">
                         <span className={`w-6 h-6 rounded-md inline-flex items-center justify-center text-xs font-black ${
                           item.class === 'A' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
@@ -1127,7 +1142,7 @@ export function Financial() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {topCustomers.map(c => (
-                    <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors">
+                    <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-bold text-slate-800 dark:text-white">{c.name}</span>
                         {c.notes && <span className="text-[10px] text-slate-400 block">{c.notes}</span>}

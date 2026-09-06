@@ -118,6 +118,28 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
       return;
     }
 
+    // Código de barras duplicado faz o PDV vender o produto errado na leitura
+    const barcode = (formData.barcode || '').trim();
+    if (barcode) {
+      const existingWithBarcode = await db.products
+        .filter(p => p.barcode === barcode && p.id !== (currentProd?.id || ''))
+        .first();
+      if (existingWithBarcode) {
+        alert(`Já existe outro produto com o código de barras "${barcode}" (${existingWithBarcode.name}). Use um código único.`);
+        return;
+      }
+    }
+
+    if (Number(formData.costPrice) < 0 || Number(formData.sellPrice) < 0) {
+      alert('Os preços não podem ser negativos.');
+      return;
+    }
+
+    if (hasAlternativeUnit && (Number(altFactor) < 1 || !altName.trim() || Number(altPrice) <= 0)) {
+      alert('Preencha corretamente a fração: nome, fator (quantidade por pacote, mínimo 1) e preço maior que zero.');
+      return;
+    }
+
     const now = new Date().toISOString();
     let productId = currentProd?.id;
     const oldPrice = currentProd?.sellPrice;
@@ -133,7 +155,8 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
       stock: Number(formData.stock || 0),
       minStock: Number(formData.minStock || 0),
       unit: formData.unit || 'UN',
-      isActive: true,
+      // Preserva o status ativo/inativo: salvar uma edição não deve reativar o produto
+      isActive: currentProd ? currentProd.isActive : true,
       alternativeUnit: hasAlternativeUnit ? {
         name: altName,
         factor: Number(altFactor),

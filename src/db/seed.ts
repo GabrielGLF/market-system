@@ -100,7 +100,7 @@ export async function seedDatabase(force: boolean = false) {
     { id: generateId(), name: 'Tomate Carmem', sku: 'HOR-002', barcode: '2000000000004', categoryId: hortifrutiId, costPrice: 4.00, sellPrice: 8.50, stock: 18, minStock: 5, unit: 'KG', isActive: true, createdAt: nowStr, updatedAt: nowStr },
     { 
       id: generateId(), name: 'Cigarro Derby Azul', sku: 'TAB-001', barcode: '78931754', categoryId: tabacariaId, costPrice: 8.50, sellPrice: 10.00, stock: 30, minStock: 10, unit: 'UN', isActive: true, createdAt: nowStr, updatedAt: nowStr,
-      alternativeUnit: { name: 'Avulso', factor: 0.05, price: 1.00, barcode: '789317540' }
+      alternativeUnit: { name: 'Avulso', factor: 20, price: 1.00, barcode: '789317540' }
     },
     { id: generateId(), name: 'Caixa de Bombom Garoto', sku: 'TAB-002', barcode: '7891008101007', categoryId: tabacariaId, costPrice: 10.00, sellPrice: 14.99, stock: 25, minStock: 10, unit: 'UN', isActive: true, createdAt: nowStr, updatedAt: nowStr },
     { id: generateId(), name: 'Café Melitta 500g', sku: 'MER-003', barcode: '7891122334455', categoryId: merceariaId, costPrice: 14.50, sellPrice: 19.90, stock: 40, minStock: 12, unit: 'UN', isActive: true, createdAt: nowStr, updatedAt: nowStr },

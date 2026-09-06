@@ -43,15 +43,14 @@ function App() {
     initDb();
   }, []);
 
-  // Atalhos de teclado globais
+  // Atalho de teclado global para o PDV.
+  // Obs: F1 (ajuda/atalhos) pertence ao Layout — aqui não, senão F1 navegaria
+  // para o dashboard E abriria o modal de atalhos ao mesmo tempo.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault();
         setCurrentView('pdv');
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        setCurrentView('dashboard');
       }
     };
     window.addEventListener('keydown', handleKeyDown);

@@ -87,7 +87,7 @@ export function InactiveProductsTab({ onReactivate, onProductReactivated }: Inac
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
               {inactiveProducts.map(product => (
-                <tr key={product.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-750/50 transition-colors">
+                <tr key={product.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/50 transition-colors">
                   <td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">
                     {product.name}
                   </td>

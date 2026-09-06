@@ -14,8 +14,8 @@ export function DebtHistoryModal({ onClose, customer }: DebtHistoryModalProps) {
     db.debtRecords
       .where('customerId')
       .equals(customer.id)
-      .reverse()
       .sortBy('date')
+      .then(arr => arr.reverse()) // mais recente primeiro
   ) || [];
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);

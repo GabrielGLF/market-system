@@ -30,8 +30,10 @@ export async function importDatabaseFromJson(jsonString: string): Promise<void> 
     
     await db.transaction('rw', db.tables, async () => {
       for (const table of db.tables) {
+        // Limpa SEMPRE: se a tabela não vier no backup, ela deve ficar vazia
+        // e não preservar dados antigos (antes, tabelas ausentes não eram limpas).
+        await table.clear();
         if (data[table.name]) {
-          await table.clear();
           await table.bulkAdd(data[table.name]);
         }
       }

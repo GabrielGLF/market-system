@@ -20,7 +20,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
   const todaysSales = sales.filter(s => s.date.startsWith(today) && s.status === 'COMPLETED');
   
   const todayRevenue = todaysSales.reduce((sum, s) => sum + s.total, 0);
-  const todayProfit = todaysSales.reduce((sum, s) => sum + s.profit, 0);
+  const todayProfit = todaysSales.reduce((sum, s) => sum + (s.profit || 0), 0);
   const todayMargin = todayRevenue > 0 ? (todayProfit / todayRevenue) * 100 : 0;
 
   const totalCost = products.reduce((sum, p) => sum + (p.costPrice * p.stock), 0);

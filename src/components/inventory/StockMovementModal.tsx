@@ -19,7 +19,8 @@ export function StockMovementModal({ isOpen, onClose, product, onSuccess }: Stoc
   const [reason, setReason] = useState('Compra / Reposição de Estoque');
 
   useEffect(() => {
-    db.products.where('isActive').equals(1).toArray().then(setProducts);
+    // equals(1) nunca encontrava isActive=true (booleano), deixando a lista vazia
+    db.products.filter(p => p.isActive).toArray().then(setProducts);
   }, []);
 
   useEffect(() => {

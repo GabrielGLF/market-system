@@ -304,7 +304,7 @@ export function Sales() {
                   const isCancelled = sale.status === 'CANCELLED';
 
                   return (
-                    <tr key={sale.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors">
+                    <tr key={sale.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                           #{sale.saleNumber}

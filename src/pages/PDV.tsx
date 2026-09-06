@@ -151,12 +151,21 @@ export const PDV: React.FC = () => {
     const costPrice = isAlternative ? (product.costPrice / (product.alternativeUnit?.factor || 1)) : product.costPrice;
     const cartItemId = isAlternative ? `${product.id}-alt` : product.id;
 
-    const existing = cart.find(item => item.productId === cartItemId);
-    if (existing) {
-      updateQuantity(cartItemId, existing.quantity + quantity);
-    } else {
+    // Atualização funcional: evita perda de itens quando dois códigos de barras
+    // são lidos em sequência rápida (antes, um closure desatualizado sobrescrevia o outro).
+    setCart(prev => {
+      const existing = prev.find(item => item.productId === cartItemId);
+      if (existing) {
+        const newQty = existing.quantity + quantity;
+        const itemSub = existing.unitPrice * newQty;
+        return prev.map(item => 
+          item.productId === cartItemId
+            ? { ...item, quantity: newQty, subtotal: itemSub, total: Math.max(0, itemSub - item.discount) }
+            : item
+        );
+      }
       const itemSubtotal = unitPrice * quantity;
-      setCart([...cart, {
+      return [...prev, {
         productId: cartItemId,
         productName: isAlternative ? `${product.name} (${product.alternativeUnit!.name})` : product.name,
         quantity,
@@ -168,8 +177,8 @@ export const PDV: React.FC = () => {
         total: itemSubtotal,
         isAlternativeUnit: isAlternative,
         originalUnitFactor: isAlternative ? product.alternativeUnit?.factor : undefined
-      }]);
-    }
+      }];
+    });
 
     setFractionProduct(null);
   };
@@ -179,7 +188,7 @@ export const PDV: React.FC = () => {
       removeFromCart(cartItemId);
       return;
     }
-    setCart(cart.map(item => {
+    setCart(prev => prev.map(item => {
       if (item.productId === cartItemId) {
         const itemSub = item.unitPrice * qty;
         return { 
@@ -194,7 +203,7 @@ export const PDV: React.FC = () => {
   };
 
   const removeFromCart = (cartItemId: string) => {
-    setCart(cart.filter(item => item.productId !== cartItemId));
+    setCart(prev => prev.filter(item => item.productId !== cartItemId));
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -232,10 +241,57 @@ export const PDV: React.FC = () => {
       return;
     }
 
-    const saleNumber = Date.now().toString().slice(-6);
+    if (cart.length === 0) {
+      toast.error('O carrinho está vazio.');
+      return;
+    }
+
+    // Validação de estoque ANTES de registrar: impede venda de quantidade maior que o disponível
+    const stockNeeded = new Map<string, { name: string; needed: number; available: number }>();
+    for (const item of cart) {
+      const rawProdId = item.productId.replace('-alt', '');
+      const p = await db.products.get(rawProdId);
+      if (!p) {
+        toast.error(`Produto "${item.productName}" não encontrado no cadastro.`);
+        return;
+      }
+      const deduction = item.isAlternativeUnit && item.originalUnitFactor
+        ? item.quantity / item.originalUnitFactor
+        : item.quantity;
+      const current = stockNeeded.get(rawProdId) || { name: p.name, needed: 0, available: p.stock };
+      current.needed += deduction;
+      stockNeeded.set(rawProdId, current);
+    }
+
+    const outOfStock = Array.from(stockNeeded.values()).filter(s => s.needed > s.available + 0.0001);
+    if (outOfStock.length > 0) {
+      const list = outOfStock.map(s => `"${s.name}" (necessário ${s.needed.toFixed(3)}, disponível ${s.available.toFixed(3)})`).join(', ');
+      toast.error(`Estoque insuficiente: ${list}`);
+      return;
+    }
+
+    const saleNumber = await (async () => {
+      const base = Date.now().toString().slice(-6);
+      // Evita cupons duplicados em vendas consecutivas rápidas
+      const exists = await db.sales.where('saleNumber').equals(base).count();
+      if (!exists) return base;
+      for (let i = 0; i < 26; i++) {
+        const candidate = `${base}-${String.fromCharCode(65 + i)}`;
+        const used = await db.sales.where('saleNumber').equals(candidate).count();
+        if (!used) return candidate;
+      }
+      return `${base}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    })();
+
     const saleDate = new Date().toISOString();
     const costTotal = cart.reduce((acc, item) => acc + (item.costPrice * item.quantity), 0);
-    const profit = total - costTotal;
+    const profit = Number((total - costTotal).toFixed(2));
+
+    // Troco sai da gaveta: o caixa físico fica com (dinheiro recebido - troco dado)
+    const totalPaid = payments.reduce((acc, pm) => acc + pm.amount, 0);
+    const change = Math.max(0, totalPaid - total);
+    const cashAmount = payments.filter(pm => pm.method === 'CASH').reduce((acc, pm) => acc + pm.amount, 0);
+    const netCash = Math.max(0, cashAmount - change);
 
     const newSale: Sale = {
       id: crypto.randomUUID(),
@@ -247,7 +303,9 @@ export const PDV: React.FC = () => {
       total,
       costTotal,
       profit,
-      paymentMethods: payments,
+      paymentMethods: payments.map(pm => pm.method === 'CASH'
+        ? { ...pm, details: { receivedAmount: pm.amount, change } }
+        : pm),
       customerId,
       customerName,
       status: 'COMPLETED',
@@ -255,90 +313,102 @@ export const PDV: React.FC = () => {
     };
 
     try {
-      // 1. Gravar Venda
-      await db.sales.add(newSale);
+      // Tudo em uma transação atômica: venda + estoque + movimentações + fiado + caixa
+      await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
+        // 1. Gravar Venda
+        await db.sales.add(newSale);
 
-      // 2. Baixar estoque e registrar movimentações
-      for (const item of cart) {
-        const rawProdId = item.productId.replace('-alt', '');
-        const p = await db.products.get(rawProdId);
-        if (p) {
-          const deduction = item.isAlternativeUnit && item.originalUnitFactor 
-            ? item.quantity / item.originalUnitFactor 
-            : item.quantity;
+        // 2. Baixar estoque e registrar movimentações
+        for (const item of cart) {
+          const rawProdId = item.productId.replace('-alt', '');
+          const p = await db.products.get(rawProdId);
+          if (p) {
+            const deduction = item.isAlternativeUnit && item.originalUnitFactor 
+              ? item.quantity / item.originalUnitFactor 
+              : item.quantity;
 
-          const previousStock = p.stock;
-          const newStock = Number(Math.max(0, previousStock - deduction).toFixed(3));
+            const previousStock = p.stock;
+            const newStock = Number((previousStock - deduction).toFixed(3));
 
-          await db.products.update(p.id, { 
-            stock: newStock, 
-            updatedAt: saleDate 
+            if (newStock < 0) {
+              throw new Error(`Estoque insuficiente para "${p.name}"`);
+            }
+
+            await db.products.update(p.id, { 
+              stock: newStock, 
+              updatedAt: saleDate 
+            });
+
+            await db.stockMovements.add({
+              id: crypto.randomUUID(),
+              productId: p.id,
+              productName: p.name,
+              type: 'SALE',
+              quantity: Number(deduction.toFixed(3)),
+              previousStock,
+              newStock,
+              reason: `Venda PDV #${saleNumber}`,
+              date: saleDate,
+              userId: activeSession.cashierName || 'Operador',
+              costPrice: p.costPrice
+            });
+          }
+        }
+
+        // 3. Atualizar Fiado se houver
+        const fiadoPayment = payments.find(pm => pm.method === 'FIADO');
+        if (fiadoPayment && customerId) {
+          const customer = await db.customers.get(customerId);
+          if (customer) {
+            const prevBalance = customer.debtBalance || 0;
+            const newBalance = prevBalance + fiadoPayment.amount;
+
+            await db.customers.update(customerId, {
+              debtBalance: newBalance,
+              updatedAt: saleDate
+            });
+
+            await db.debtRecords.add({
+              id: crypto.randomUUID(),
+              customerId,
+              saleId: newSale.id,
+              type: 'DEBIT',
+              amount: fiadoPayment.amount,
+              previousBalance: prevBalance,
+              newBalance,
+              date: saleDate,
+              description: `Compra na Caderneta (Cupom #${saleNumber})`,
+              receiptNumber: saleNumber
+            });
+          }
+        }
+
+        // 4. Atualizar Sessão de Caixa Ativa (sem mutar o objeto da live query)
+        const session = await db.cashSessions.get(activeSession.id);
+        if (session) {
+          const totals = { ...session.totalSales };
+          payments.forEach(pm => {
+            if (pm.method === 'CASH') {
+              totals.cash += netCash;
+            } else if (pm.method === 'PIX') {
+              totals.pix += pm.amount;
+            } else if (pm.method === 'CREDIT_CARD') {
+              totals.credit += pm.amount;
+            } else if (pm.method === 'DEBIT_CARD') {
+              totals.debit += pm.amount;
+            } else if (pm.method === 'FIADO') {
+              totals.fiado += pm.amount;
+            } else if (pm.method === 'VOUCHER') {
+              totals.voucher += pm.amount;
+            }
           });
 
-          await db.stockMovements.add({
-            id: crypto.randomUUID(),
-            productId: p.id,
-            productName: p.name,
-            type: 'SALE',
-            quantity: Number(deduction.toFixed(3)),
-            previousStock,
-            newStock,
-            reason: `Venda PDV #${saleNumber}`,
-            date: saleDate,
-            userId: activeSession.cashierName || 'Operador',
-            costPrice: p.costPrice
+          await db.cashSessions.update(session.id, {
+            totalSales: totals,
+            expectedCashInDrawer: Number((session.expectedCashInDrawer + netCash).toFixed(2))
           });
         }
-      }
-
-      // 3. Atualizar Fiado se houver
-      const fiadoPayment = payments.find(pm => pm.method === 'FIADO');
-      if (fiadoPayment && customerId) {
-        const customer = await db.customers.get(customerId);
-        if (customer) {
-          const prevBalance = customer.debtBalance || 0;
-          const newBalance = prevBalance + fiadoPayment.amount;
-
-          await db.customers.update(customerId, {
-            debtBalance: newBalance,
-            updatedAt: saleDate
-          });
-
-          await db.debtRecords.add({
-            id: crypto.randomUUID(),
-            customerId,
-            saleId: newSale.id,
-            type: 'DEBIT',
-            amount: fiadoPayment.amount,
-            previousBalance: prevBalance,
-            newBalance,
-            date: saleDate,
-            description: `Compra na Caderneta (Cupom #${saleNumber})`,
-            receiptNumber: saleNumber
-          });
-        }
-      }
-
-      // 4. Atualizar Sessão de Caixa Ativa
-      payments.forEach(pm => {
-        if (pm.method === 'CASH') {
-          activeSession.totalSales.cash += pm.amount;
-          activeSession.expectedCashInDrawer += pm.amount;
-        } else if (pm.method === 'PIX') {
-          activeSession.totalSales.pix += pm.amount;
-        } else if (pm.method === 'CREDIT_CARD') {
-          activeSession.totalSales.credit += pm.amount;
-        } else if (pm.method === 'DEBIT_CARD') {
-          activeSession.totalSales.debit += pm.amount;
-        } else if (pm.method === 'FIADO') {
-          activeSession.totalSales.fiado += pm.amount;
-        } else if (pm.method === 'VOUCHER') {
-          activeSession.totalSales.voucher += pm.amount;
-        }
-        activeSession.totalSales.total += pm.amount;
       });
-
-      await db.cashSessions.put(activeSession);
 
       // 5. Sucesso, Efeitos & Cupom
       completeSale();
@@ -355,7 +425,7 @@ export const PDV: React.FC = () => {
       toast.success(`Venda #${saleNumber} finalizada com sucesso!`);
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao registrar a venda.');
+      toast.error(err instanceof Error ? err.message : 'Erro ao registrar a venda.');
     }
   };
 
@@ -579,7 +649,7 @@ export const PDV: React.FC = () => {
               step="0.50"
               min="0"
               value={globalDiscount || ''}
-              onChange={(e) => setGlobalDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+              onChange={(e) => setGlobalDiscount(Math.min(Math.max(0, parseFloat(e.target.value) || 0), subtotal))}
               className="w-20 p-1 text-right border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-rose-600 rounded font-bold text-xs"
               placeholder="0.00"
             />

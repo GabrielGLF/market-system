@@ -9,6 +9,7 @@ import { DebtHistoryModal } from '../components/customers/DebtHistoryModal';
 
 export function Customers() {
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const settings = useLiveQuery(() => db.settings.toCollection().first());
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modal states
@@ -52,7 +53,9 @@ export function Customers() {
   const sendWhatsApp = (customer: Customer) => {
     const cleanPhone = customer.phone.replace(/\D/g, '');
     const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const text = `Olá ${customer.name}, passando para lembrar do seu saldo pendente de ${formatCurrency(customer.debtBalance)} na loja. Chave Pix: pix@marketsystem.com.br. Por favor, regularize assim que puder. Muito obrigado!`;
+    // Usa a chave Pix configurada nas configurações (antes estava fixa)
+    const pixKey = settings?.pixKey || 'pix@marketsystem.com.br';
+    const text = `Olá ${customer.name}, passando para lembrar do seu saldo pendente de ${formatCurrency(customer.debtBalance)} na loja. Chave Pix: ${pixKey}. Por favor, regularize assim que puder. Muito obrigado!`;
     const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
