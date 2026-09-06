@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { Lock, LockOpen, TrendingUp, TrendingDown, Clock, Printer } from 'lucide-react';
+import { Lock, LockOpen, TrendingUp, TrendingDown, Clock, Printer, ScrollText } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { OpenCashModal } from '../components/cash/OpenCashModal';
 import { CashMovementModal } from '../components/cash/CashMovementModal';
 import { CloseCashModal } from '../components/cash/CloseCashModal';
+import { CashAuditModal } from '../components/cash/CashAuditModal';
 
 export const CashRegister: React.FC = () => {
   const [isOpenerOpen, setOpenerOpen] = useState(false);
   const [isCloserOpen, setCloserOpen] = useState(false);
+  const [isAuditOpen, setAuditOpen] = useState(false);
   const [movementType, setMovementType] = useState<'SUPPLY' | 'BLEED' | null>(null);
 
   const activeSession = useLiveQuery(
@@ -58,6 +60,9 @@ export const CashRegister: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-4">
+          <button onClick={() => setAuditOpen(true)} className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2" title="Reconstruir linha a linha o valor esperado na gaveta">
+            <ScrollText className="w-4 h-4" /> Auditoria
+          </button>
           <button onClick={() => setMovementType('BLEED')} className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400 font-semibold rounded-lg hover:bg-red-200 flex items-center gap-2">
             <TrendingDown className="w-4 h-4" /> Sangria
           </button>
@@ -137,6 +142,7 @@ export const CashRegister: React.FC = () => {
 
       <CashMovementModal isOpen={movementType !== null} onClose={() => setMovementType(null)} onSuccess={() => {}} type={movementType || 'SUPPLY'} sessionId={activeSession.id} />
       <CloseCashModal isOpen={isCloserOpen} onClose={() => setCloserOpen(false)} onSuccess={() => {}} session={activeSession} />
+      <CashAuditModal isOpen={isAuditOpen} onClose={() => setAuditOpen(false)} session={activeSession} />
     </div>
   );
 };

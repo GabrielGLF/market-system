@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { formatNumber } from '../utils/format';
@@ -10,14 +10,26 @@ import {
 import { 
   TrendingUp, Package, DollarSign, AlertCircle, 
   ShoppingCart, ArrowRight, Wallet, Percent, 
-  PackagePlus, PlusCircle
+  PackagePlus, PlusCircle, Bell, ChevronRight
 } from 'lucide-react';
+import { buildActionItems, type ActionItem } from '../utils/actionCenter';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
 
 export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
+  // Central de Ações: o que precisa de atenção hoje (calculado dos dados reais).
+  const [actions, setActions] = useState<ActionItem[]>([]);
+  const [actionsOpen, setActionsOpen] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    buildActionItems().then(items => { if (alive) setActions(items); }).catch(() => {});
+    const t = setInterval(() => {
+      buildActionItems().then(items => { if (alive) setActions(items); }).catch(() => {});
+    }, 120_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
   const products = useLiveQuery(() => db.products.toArray()) || [];
   const settings = useLiveQuery(() => db.settings.toCollection().first());
 
@@ -148,6 +160,42 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
           </div>
         </div>
       </div>
+
+      {/* Central de Ações: o que precisa de atenção hoje */}
+      {actions.length > 0 && actionsOpen && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100 dark:border-slate-700">
+            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+              <Bell className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+              Precisa de atenção
+              <span className="text-xs font-medium text-slate-400">({actions.length})</span>
+            </h3>
+            <button onClick={() => setActionsOpen(false)} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              Ocultar
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+            {actions.slice(0, 6).map(a => (
+              <button
+                key={a.id}
+                onClick={() => onNavigate(a.target)}
+                className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors text-left"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      a.severity === 'critical' ? 'bg-rose-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-slate-400'
+                    }`} />
+                    {a.title}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate mt-0.5 pl-3.5">{a.detail}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-500 shrink-0 ml-3" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Gráfico */}

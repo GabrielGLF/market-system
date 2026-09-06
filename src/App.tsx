@@ -17,6 +17,7 @@ import { MobileScanner } from './pages/MobileScanner';
 import { seedDatabase } from './db/seed';
 import { db } from './db';
 import { installSyncHooks, startSyncEngine } from './utils/sync';
+import { runAutoBackupIfDue } from './utils/cloudBackup';
 
 function App() {
   const [currentView, setCurrentView] = useState<string>(() => {
@@ -38,6 +39,13 @@ function App() {
   // segue offline-first e o outbox apenas acumula.
   useEffect(() => {
     startSyncEngine();
+  }, []);
+
+  // Backup automático (lazy): ao abrir o app, se passaram 24h do último e a
+  // nuvem está configurada, envia o backup completo em segundo plano.
+  useEffect(() => {
+    const t = setTimeout(() => { void runAutoBackupIfDue(); }, 15_000);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {

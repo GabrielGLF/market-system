@@ -8,10 +8,11 @@ import { InactiveProductsTab } from '../components/inventory/InactiveProductsTab
 import { 
   Plus, Search, Edit2, ArrowRightLeft, Package, 
   FolderPlus, AlertTriangle, CheckCircle, Download, 
-  EyeOff, Layers, RefreshCw
+  EyeOff, Layers, RefreshCw, FileText
 } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../utils/format';
 import { usePagination } from '../components/common/Pagination';
+import { BulkPurchaseModal } from '../components/inventory/BulkPurchaseModal';
 
 export function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -23,6 +24,7 @@ export function Inventory() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
 
@@ -143,6 +145,13 @@ export function Inventory() {
           >
             <Download className="w-4 h-4 text-blue-600" />
             Exportar CSV
+          </button>
+          <button
+            onClick={() => setIsBulkOpen(true)}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm border border-slate-200 dark:border-slate-700"
+          >
+            <FileText className="w-4 h-4 text-emerald-600" />
+            Nota do Fornecedor
           </button>
           <button
             onClick={() => {
@@ -439,6 +448,14 @@ export function Inventory() {
         <CategoryModal
           isOpen={isCategoryModalOpen}
           onClose={() => setIsCategoryModalOpen(false)}
+          onSuccess={loadData}
+        />
+      )}
+
+      {isBulkOpen && (
+        <BulkPurchaseModal
+          isOpen={isBulkOpen}
+          onClose={() => setIsBulkOpen(false)}
           onSuccess={loadData}
         />
       )}

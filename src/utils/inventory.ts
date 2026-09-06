@@ -58,6 +58,65 @@ export interface StockMutationResult {
  * Puro: novo custo médio ponderado após uma entrada. Testável isoladamente.
  * Estoque zero/negativo → o preço de compra vira o novo custo (recomeço limpo).
  */
+export interface RepricingAlert {
+  /** true = vale alertar (margem caiu abaixo do mínimo ou caiu bastante). */
+  shouldAlert: boolean;
+  /** Margem com o custo médio NOVO (após a compra), em %. */
+  newMarginPct: number;
+  /** Margem com o custo médio ANTES da compra, em %. */
+  oldMarginPct: number;
+  /** Queda de margem em pontos percentuais (positivo = caiu). */
+  marginDropPp: number;
+  /** Menor preço de venda que preserva a margem mínima, já arredondado p/ cima em centavos. */
+  suggestedMinPrice: number;
+  /** Motivo legível para exibir no toast/central. */
+  message: string;
+}
+
+/**
+ * Preço mínimo que preserva a margem alvo dado um custo:
+ * preco = custo / (1 - margem/100). Arredonda PARA CIMA em centavos
+ * (preço "quebrado" para baixo entregaria margem menor que a mínima).
+ */
+export function minPriceForMargin(cost: number, targetMarginPct: number): number {
+  if (cost <= 0) return 0;
+  if (targetMarginPct >= 100) return Number.MAX_SAFE_INTEGER;
+  const raw = cost / (1 - targetMarginPct / 100);
+  return Math.ceil(raw * 100) / 100;
+}
+
+/**
+ * Avalia se uma compra merece alerta de reprecificação: a entrada pode ter
+ * empurrado o custo médio para cima e comprimido a margem no preço atual.
+ *
+ * Regras (ambas devem valer para não barulhentar):
+ *  - margem nova abaixo do mínimo (default 20%); OU queda > 5 p.p. de uma vez;
+ *  - o preço de venda precisa ser > 0 (produto sem preço não se reprecifica).
+ */
+export function evaluateRepricing(
+  sellPrice: number,
+  oldAvgCost: number,
+  newAvgCost: number,
+  minMarginPct = 20,
+  maxDropPp = 5
+): RepricingAlert {
+  const newMarginPct = sellPrice > 0 ? ((sellPrice - newAvgCost) / sellPrice) * 100 : 0;
+  const oldMarginPct = sellPrice > 0 && oldAvgCost > 0 ? ((sellPrice - oldAvgCost) / sellPrice) * 100 : newMarginPct;
+  const marginDropPp = oldMarginPct - newMarginPct;
+
+  const belowMinimum = newMarginPct < minMarginPct;
+  const bigDrop = marginDropPp > maxDropPp;
+  const shouldAlert = sellPrice > 0 && newAvgCost > oldAvgCost && (belowMinimum || bigDrop);
+
+  const suggestedMinPrice = minPriceForMargin(newAvgCost, minMarginPct);
+
+  const message = shouldAlert
+    ? `Margem caiu de ${oldMarginPct.toFixed(1)}% para ${newMarginPct.toFixed(1)}% com o novo custo médio. Mínimo sugerido: ${minPriceForMargin(newAvgCost, minMarginPct).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (margem ${minMarginPct}%).`
+    : '';
+
+  return { shouldAlert, newMarginPct, oldMarginPct, marginDropPp, suggestedMinPrice, message };
+}
+
 export function computeWeightedAverageCost(
   currentStock: number,
   currentAvgCost: number,

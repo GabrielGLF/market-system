@@ -2,7 +2,7 @@ import { db } from './index';
 import { setSyncPaused } from '../utils/sync';
 import type { 
   Category, Product, StoreSettings, Customer, Sale, SaleItem,
-  CashSession, CashMovement, DebtRecord, StockMovement, PriceHistory
+  CashSession, DebtRecord, StockMovement, PriceHistory
 } from '../types';
 
 // Helper to generate IDs
@@ -136,6 +136,9 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
     openedAt: sessionOpenedAt.toISOString(),
     initialBalance: 150,
     currentBalance: 150,
+    // O fundo inicial JÁ É o dinheiro na gaveta — não há suprimento adicional
+    // (antes: initialBalance 150 + SUPPLY 150, mas esperado 150 — a auditoria
+    // de caixa reconstruía 300 e denunciava a divergência).
     totalIn: 150,
     totalOut: 0,
     totalSales: { cash: 0, credit: 0, debit: 0, pix: 0, voucher: 0, fiado: 0, total: 0 },
@@ -143,12 +146,7 @@ async function seedDatabaseInner(force: boolean): Promise<void> {
     status: 'OPEN'
   };
   await db.cashSessions.put(currentSession);
-
-  // Initial money supply
-  const supply: CashMovement = {
-    id: generateId(), sessionId: currentSession.id, type: 'SUPPLY', amount: 150, reason: 'Fundo de troco inicial', date: sessionOpenedAt.toISOString()
-  };
-  await db.cashMovements.put(supply);
+  // (sem movimentação de suprimento: o fundo inicial já representa o dinheiro)
 
   // 7. Stock Movements & Price Histories Seeds
   const stockMovements: StockMovement[] = [];

@@ -3,12 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { 
   ArrowRightLeft, Search, Plus, Download, 
-  ArrowDownLeft, ArrowUpRight, ShoppingBag, RotateCcw, SlidersHorizontal 
+  ArrowDownLeft, ArrowUpRight, ShoppingBag, RotateCcw, SlidersHorizontal, FileText
 } from 'lucide-react';
 import { formatDateTime, formatCurrency, formatNumber } from '../utils/format';
 import { loadStockMovementsBetween, periodStartIso } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
 import { StockMovementModal } from '../components/inventory/StockMovementModal';
+import { BulkPurchaseModal } from '../components/inventory/BulkPurchaseModal';
 import { usePagination } from '../components/common/Pagination';
 import type { StockMovement } from '../types';
 
@@ -17,6 +18,7 @@ export function StockMovements() {
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [period, setPeriod] = useState<SalesPeriod>('30d');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
 
   // Escalabilidade: a janela do período sai do índice `date`. Antes: a tabela
   // INTEIRA de movimentações era materializada (cada venda gera 1+ movimento —
@@ -107,6 +109,13 @@ export function StockMovements() {
           >
             <Download className="w-4 h-4 text-emerald-600" />
             Exportar CSV
+          </button>
+          <button
+            onClick={() => setIsBulkOpen(true)}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm border border-slate-200 dark:border-slate-700"
+          >
+            <FileText className="w-4 h-4 text-emerald-600" />
+            Nota do Fornecedor
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
@@ -285,6 +294,14 @@ export function StockMovements() {
         <StockMovementModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
+        />
+      )}
+
+      {/* Modal de Compra em Lote (nota do fornecedor) */}
+      {isBulkOpen && (
+        <BulkPurchaseModal
+          isOpen={isBulkOpen}
+          onClose={() => setIsBulkOpen(false)}
         />
       )}
     </div>

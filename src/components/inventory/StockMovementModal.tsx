@@ -4,7 +4,7 @@ import type { Product } from '../../types';
 import { X, Save, ArrowRightLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../utils/format';
-import { applyStockIn, applyStockOut, applyStockAdjust, computeWeightedAverageCost } from '../../utils/inventory';
+import { applyStockIn, applyStockOut, applyStockAdjust, computeWeightedAverageCost, evaluateRepricing } from '../../utils/inventory';
 
 interface StockMovementModalProps {
   isOpen: boolean;
@@ -100,9 +100,18 @@ export function StockMovementModal({ isOpen, onClose, product, onSuccess }: Stoc
           supplier: supplier.trim() || undefined,
           invoiceNumber: invoiceNumber.trim() || undefined,
         });
+        // Alerta de reprecificação: a compra pode ter comprimido a margem.
+        const repricing = evaluateRepricing(
+          selectedProduct.sellPrice,
+          selectedProduct.costPrice || 0,
+          movement.avgCostAfter || 0
+        );
         toast.success(
           `Entrada registrada: +${movement.quantity} ${selectedProduct.unit} de "${selectedProduct.name}". Custo médio atualizado para ${formatCurrency(movement.avgCostAfter || 0)}.`
         );
+        if (repricing.shouldAlert) {
+          toast.warning(repricing.message, { duration: 8000 });
+        }
       } else if (type === 'OUT') {
         const { movement } = await applyStockOut({
           productId: selectedProduct.id,

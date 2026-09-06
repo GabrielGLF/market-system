@@ -4,10 +4,15 @@ import { db } from '../db';
 import { Settings as SettingsIcon, Save, Database, Download, Upload, RefreshCw, Store, CreditCard, Bell, MapPin, Receipt, CloudUpload, CloudOff, Cloud, LogOut, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { seedDatabase } from '../db/seed';
-import { exportDatabaseToJson, importDatabaseFromJson, downloadJson } from '../utils/export';
+import { exportDatabaseToJson, importDatabaseFromJson, downloadJson, downloadSafetySnapshotBeforeRestore } from '../utils/export';
 import { syncNow, getLastSyncAt, getLastSyncError } from '../utils/sync';
 import { isCloudConfigured, getSupabaseClient } from '../utils/cloudConfig';
-import { formatDateTime } from '../utils/format';
+import {
+  runCloudBackup, listCloudBackups, downloadCloudBackup,
+  getLastBackupAgeHours, type CloudBackupInfo,
+} from '../utils/cloudBackup';
+import { decryptJson } from '../utils/cloudBackup';
+import { formatDateTime, formatNumber } from '../utils/format';
 import type { StoreSettings } from '../types';
 
 export function Settings() {
@@ -17,6 +22,12 @@ export function Settings() {
   // Estado da conexão com a nuvem (sessão do Supabase neste dispositivo)
   const [isCloudSession, setIsCloudSession] = useState(false);
   const [cloudEmail, setCloudEmail] = useState('');
+
+  // Backup na nuvem
+  const [backupPassword, setBackupPassword] = useState('');
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupInfo[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -135,6 +146,14 @@ export function Settings() {
     reader.onload = async (event) => {
       try {
         const json = event.target?.result as string;
+        // Rede de segurança: baixa o estado ATUAL antes de substituir a base.
+        // Mesmo um backup válido porém antigo nunca é uma perda sem volta.
+        try {
+          await downloadSafetySnapshotBeforeRestore();
+        } catch (snapErr) {
+          toast.error(snapErr instanceof Error ? snapErr.message : 'Falha no snapshot de segurança.');
+          return;
+        }
         // Só restaura se o arquivo for um backup válido (nunca apaga dados com
         // um arquivo corrompido/errado — antes o erro no onload passava em branco).
         await importDatabaseFromJson(json);
@@ -191,6 +210,60 @@ export function Settings() {
       toast.info('Nuvem desconectada — os dados continuam salvos no dispositivo.');
     } catch {
       toast.error('Falha ao desconectar a nuvem.');
+    }
+  };
+
+  const refreshCloudBackups = async () => {
+    if (!serverConfigured || !isCloudSession) return;
+    setIsLoadingBackups(true);
+    try {
+      setCloudBackups(await listCloudBackups());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao listar backups da nuvem.');
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshCloudBackups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverConfigured, isCloudSession]);
+
+  const handleCloudBackupNow = async () => {
+    setIsBackingUp(true);
+    try {
+      const result = await runCloudBackup(backupPassword.trim() || undefined);
+      toast.success(`Backup enviado: ${result.path.split('/').pop()}${result.encrypted ? ' (criptografado)' : ''}`);
+      await refreshCloudBackups();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro no backup na nuvem.');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleRestoreFromCloud = async (backup: CloudBackupInfo) => {
+    if (!window.confirm(`Restaurar o backup "${backup.name}"? A base atual será substituída (um snapshot dela será baixado antes).`)) return;
+    try {
+      let json = await downloadCloudBackup(backup.path);
+      const encrypted = json.includes('"__encrypted": true');
+      if (encrypted) {
+        const pwd = window.prompt('Este backup é criptografado. Digite a senha:');
+        if (pwd === null) return;
+        try {
+          json = await decryptJson(json, pwd);
+        } catch {
+          toast.error('Senha incorreta ou arquivo corrompido.');
+          return;
+        }
+      }
+      await downloadSafetySnapshotBeforeRestore();
+      await importDatabaseFromJson(json);
+      toast.success('Backup da nuvem restaurado! Recarregando…');
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao restaurar da nuvem.');
     }
   };
 
@@ -594,6 +667,73 @@ export function Settings() {
           >
             <RefreshCw className="w-4 h-4" /> Recarregar Dados de Demonstração
           </button>
+        </div>
+
+        {/* Backup automático na nuvem */}
+        <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <CloudUpload className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+                Backup automático na nuvem
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {(() => {
+                  const age = getLastBackupAgeHours();
+                  if (!serverConfigured) return 'Conecte a nuvem acima para ativar o backup automático diário.';
+                  if (!isCloudSession) return 'Conecte-se à nuvem para enviar backups.';
+                  if (age === null) return 'Nenhum backup enviado ainda deste dispositivo.';
+                  return `Último backup: há ${formatNumber(age, 1)}h — novo backup automático a cada 24h ao abrir o sistema.`;
+                })()}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                value={backupPassword}
+                onChange={e => setBackupPassword(e.target.value)}
+                placeholder="Senha de criptografia (opcional)"
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white text-xs w-56 focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <button
+                onClick={handleCloudBackupNow}
+                disabled={isBackingUp || !serverConfigured || !isCloudSession}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                <CloudUpload className="w-4 h-4" />
+                {isBackingUp ? 'Enviando…' : 'Backup agora'}
+              </button>
+            </div>
+          </div>
+
+          {serverConfigured && isCloudSession && (
+            <div className="mt-3">
+              {isLoadingBackups ? (
+                <p className="text-xs text-slate-400">Carregando backups da nuvem…</p>
+              ) : cloudBackups.length === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum backup na nuvem ainda.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                  {cloudBackups.slice(0, 10).map(b => (
+                    <div key={b.path} className="flex items-center justify-between px-4 py-2.5 bg-slate-50/60 dark:bg-slate-900/40">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{b.name}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {b.createdAt ? formatDateTime(b.createdAt) : '—'} · {formatNumber(b.sizeBytes / 1024, 0)} KB
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRestoreFromCloud(b)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors shrink-0 ml-3"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Restaurar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

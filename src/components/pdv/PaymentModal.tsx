@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { 
   X, CreditCard, Banknote, QrCode, Ticket, 
   BookUser, Plus, Trash2, Copy, Check, AlertCircle 
 } from 'lucide-react';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, normalizeText } from '../../utils/format';
 import { SmartChangeDisplay } from './SmartChangeDisplay';
 import type { PaymentMethodType, PaymentMethodEntry, Customer } from '../../types';
 import { toast } from 'sonner';
@@ -28,6 +28,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Fiado / Customer state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
+  const [customerFilter, setCustomerFilter] = useState('');
+  const filteredCustomers = useMemo(() => {
+    const q = normalizeText(customerFilter.trim());
+    if (!q) return customers;
+    return customers.filter(c => normalizeText(c.name).includes(q) || c.phone.includes(q));
+  }, [customers, customerFilter]);
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
   // Store settings for Pix key
@@ -173,13 +179,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Cliente da caderneta
               </label>
+              {/* Escalabilidade: com centenas de clientes, renderizar todos em
+                  <option> pesa o modal; filtra por digitação (sem acentos) e
+                  mostra no máximo 50. */}
+              <input
+                type="text"
+                value={customerFilter}
+                onChange={e => setCustomerFilter(e.target.value)}
+                placeholder="Filtrar clientes por nome ou telefone…"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-900 text-slate-800 dark:text-white text-xs focus:ring-2 focus:ring-slate-400 outline-none"
+              />
               <select
                 value={selectedCustomerId}
                 onChange={e => setSelectedCustomerId(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-900 text-slate-800 dark:text-white text-xs focus:ring-2 focus:ring-slate-400 outline-none"
+                size={Math.min(6, Math.max(1, filteredCustomers.length))}
               >
                 <option value="">Selecione o cliente cadastrado…</option>
-                {customers.map(c => (
+                {filteredCustomers.slice(0, 50).map(c => (
                   <option key={c.id} value={c.id}>
                     {c.name} — saldo {formatCurrency(c.debtBalance)} · limite {formatCurrency(c.creditLimit)}
                   </option>

@@ -56,6 +56,23 @@ export function downloadJson(jsonString: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Rede de segurança da restauração: baixa automaticamente o estado ATUAL da
+ * base antes de substituí-la pelo arquivo escolhido. Assim, mesmo um backup
+ * válido porém antigo não é uma perda sem volta — o dado que existia antes
+ * fica salvo no disco do usuário.
+ */
+export async function downloadSafetySnapshotBeforeRestore(): Promise<void> {
+  try {
+    const json = await exportDatabaseToJson();
+    downloadJson(json, `snapshot_antes_restauracao_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`);
+  } catch (err) {
+    // Nunca bloqueie a restauração por falha no snapshot — mas avise.
+    console.error('Falha ao gerar snapshot de segurança:', err);
+    throw new Error('Não foi possível gerar o snapshot de segurança da base atual. A restauração foi cancelada para proteger seus dados.');
+  }
+}
+
 export async function importDatabaseFromJson(jsonString: string): Promise<void> {
   try {
     let data: unknown;
