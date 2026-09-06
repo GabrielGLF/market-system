@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { MetricHelpModal } from '../components/financial/MetricHelpModal';
 import { formatCurrency, formatNumber } from '../utils/format';
+import { usePagination } from '../components/common/Pagination';
 import {
   loadCompletedSalesBetween, loadStockMovementsBetween, buildCustomerStats,
   buildSalesVelocity, periodStartIso, localMidnightIso
@@ -240,6 +241,9 @@ export function Financial() {
     .sort((a, b) => b.faturamento - a.faturamento);
 
   let accumulated = 0;
+  // Paginação da tabela de reposição (cresce com o catálogo).
+  const { pageItems, paginationUI } = usePagination(productAnalyticsList, activeProducts.length);
+
   const abcData = sortedProducts.map(p => {
     accumulated += p.faturamento;
     const percentage = totalFaturamento > 0 ? (accumulated / totalFaturamento) * 100 : 0;
@@ -826,7 +830,7 @@ export function Financial() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {productAnalyticsList.map(item => (
+                  {pageItems(productAnalyticsList).map(item => (
                     <tr key={item.product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-semibold text-slate-800 dark:text-white">{item.product.name}</span>
@@ -880,6 +884,7 @@ export function Financial() {
                 </tbody>
               </table>
             </div>
+            {paginationUI}
           </div>
         </div>
       )}

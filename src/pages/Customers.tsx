@@ -6,6 +6,7 @@ import { Customer } from '../types';
 import { CustomerModal } from '../components/customers/CustomerModal';
 import { DebtPaymentModal } from '../components/customers/DebtPaymentModal';
 import { DebtHistoryModal } from '../components/customers/DebtHistoryModal';
+import { usePagination } from '../components/common/Pagination';
 
 export function Customers() {
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
@@ -27,6 +28,9 @@ export function Customers() {
     c.document.includes(searchTerm) || 
     c.phone.includes(searchTerm)
   );
+
+  // Paginação: a base de clientes da caderneta cresce por anos.
+  const { pageItems, paginationUI } = usePagination(filteredCustomers, searchTerm);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -102,7 +106,7 @@ export function Customers() {
               </tr>
             </thead>
             <tbody>
-              {filteredCustomers.map(c => (
+              {pageItems(filteredCustomers).map(c => (
                 <tr key={c.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                   <td className="py-3 px-4">
                     <p className="font-semibold text-slate-800 dark:text-slate-200">{c.name}</p>
@@ -150,6 +154,7 @@ export function Customers() {
             </tbody>
           </table>
         </div>
+        {paginationUI}
       </div>
 
       {isCustomerModalOpen && (

@@ -11,6 +11,7 @@ import {
   EyeOff, Layers, RefreshCw
 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
+import { usePagination } from '../components/common/Pagination';
 
 export function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -107,6 +108,12 @@ export function Inventory() {
   const totalSell = products.filter(p => p.isActive).reduce((acc, p) => acc + (p.sellPrice * p.stock), 0);
   const lowStockCount = products.filter(p => p.isActive && p.stock <= p.minStock).length;
   const inactiveCount = products.filter(p => !p.isActive).length;
+
+  // Paginação: catálogos grandes (milhares de SKUs) não podem renderizar tudo.
+  const { pageItems, paginationUI } = usePagination(
+    filteredProducts,
+    [search, selectedCategory, statusFilter]
+  );
 
   return (
     <div className="space-y-6">
@@ -302,7 +309,7 @@ export function Inventory() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map(product => {
+                pageItems(filteredProducts).map(product => {
                     const category = categories.find(c => c.id === product.categoryId);
                     const isLow = product.stock <= product.minStock;
                     const isOut = product.stock <= 0;
@@ -417,6 +424,7 @@ export function Inventory() {
               </tbody>
             </table>
           </div>
+          {paginationUI}
         </div>
       )}
 

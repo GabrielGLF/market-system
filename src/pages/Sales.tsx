@@ -13,6 +13,7 @@ import { generateSalesPdf } from '../utils/salesPdf';
 import type { Sale } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/format';
 import { loadSalesBetween, periodStartIso } from '../utils/analytics';
+import { usePagination } from '../components/common/Pagination';
 
 export function Sales() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,6 +62,13 @@ export function Sales() {
   });
 
   const completedSales = filteredSales.filter(s => s.status === 'COMPLETED');
+
+  // Paginação: com anos de histórico, renderizar todas as linhas trava a UI.
+  // Métricas, gráfico e exportação continuam sobre a lista COMPLETA filtrada.
+  const { pageItems, paginationUI } = usePagination(
+    filteredSales,
+    [searchTerm, statusFilter, methodFilter, period]
+  );
   const totalFaturado = completedSales.reduce((acc, s) => acc + s.total, 0);
   const totalLucro = completedSales.reduce((acc, s) => acc + (s.profit || 0), 0);
   const totalItens = completedSales.reduce((acc, s) => acc + s.items.reduce((sum, i) => sum + i.quantity, 0), 0);
@@ -310,7 +318,7 @@ export function Sales() {
                   </td>
                 </tr>
               ) : (
-                filteredSales.map(sale => {
+                pageItems(filteredSales).map(sale => {
                   const isCancelled = sale.status === 'CANCELLED';
 
                   return (
@@ -403,6 +411,7 @@ export function Sales() {
             </tbody>
           </table>
         </div>
+        {paginationUI}
       </div>
 
       {/* Modal de Detalhes da Venda com Estorno / Devolução Parcial */}

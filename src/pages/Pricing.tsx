@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/format';
 import { calculateMargin, calculateMarkup } from '../utils/calc';
 import { QuickPricePopover } from '../components/pricing/QuickPricePopover';
 import { PriceHistoryModal } from '../components/pricing/PriceHistoryModal';
+import { usePagination } from '../components/common/Pagination';
 
 export function Pricing() {
   const products = useLiveQuery(() => db.products.filter(p => p.isActive).toArray()) || [];
@@ -49,6 +50,9 @@ export function Pricing() {
     const matchesCategory = selectedCategory === 'ALL' || p.categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  // Paginação: acompanha o crescimento do catálogo.
+  const { pageItems, paginationUI } = usePagination(filteredProducts, [search, selectedCategory]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -171,7 +175,7 @@ export function Pricing() {
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((p: Product) => {
+                pageItems(filteredProducts).map((p: Product) => {
                   const cat = categories.find((c: Category) => c.id === p.categoryId);
                   const margin = calculateMargin(p.costPrice, p.sellPrice);
                   const markup = calculateMarkup(p.costPrice, p.sellPrice);
@@ -270,6 +274,7 @@ export function Pricing() {
             </tbody>
           </table>
         </div>
+        {paginationUI}
       </div>
 
       {/* Modal de Histórico de Preços */}

@@ -9,6 +9,7 @@ import { formatDateTime, formatCurrency } from '../utils/format';
 import { loadStockMovementsBetween, periodStartIso } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
 import { StockMovementModal } from '../components/inventory/StockMovementModal';
+import { usePagination } from '../components/common/Pagination';
 import type { StockMovement } from '../types';
 
 export function StockMovements() {
@@ -51,6 +52,13 @@ export function StockMovements() {
 
     return true;
   });
+
+  // Paginação: cada venda gera 1+ movimentação — é a tabela que mais cresce no
+  // sistema. Cards e CSV continuam sobre a lista COMPLETA filtrada.
+  const { pageItems, paginationUI } = usePagination(
+    filteredMovements,
+    [searchTerm, typeFilter, period]
+  );
 
   const countIn = filteredMovements.filter(m => m.type === 'IN').reduce((acc, m) => acc + m.quantity, 0);
   const countOut = filteredMovements.filter(m => m.type === 'OUT').reduce((acc, m) => acc + m.quantity, 0);
@@ -212,7 +220,7 @@ export function StockMovements() {
                   </td>
                 </tr>
               ) : (
-                filteredMovements.map(m => {
+                pageItems(filteredMovements).map(m => {
                   let badgeColor = 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
                   let label: string = m.type;
 
@@ -274,6 +282,7 @@ export function StockMovements() {
             </tbody>
           </table>
         </div>
+        {paginationUI}
       </div>
 
       {/* Modal de Lançamento de Movimentação */}
