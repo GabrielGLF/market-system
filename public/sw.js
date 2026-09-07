@@ -1,18 +1,19 @@
-// Service Worker com cache em runtime: torna o app realmente offline-first.
-// Antes, apenas '/', '/index.html' e '/manifest.json' eram pré-cacheados e os
-// chunks JS/CSS (com hash) nunca eram armazenados — o app não abria offline.
-const CACHE_NAME = 'marketsystem-cache-v2';
-const urlsToCache = [
+// Service Worker offline-first com estratégia por tipo de recurso.
+// - Navegações e index.html: network-first (nunca prende bundle velho após deploy)
+// - Assets com hash (JS/CSS): cache-first (imutáveis, seguros para cache longo)
+// - sw.js e manifest.json: nunca cacheados aqui (o próprio SW não se auto-cacheia)
+// - Offline: navegação cai para /index.html do cache.
+const CACHE_NAME = 'marketsystem-cache-v3';
+const CORE_URLS = [
   '/',
   '/index.html',
-  '/manifest.json',
   '/favicon.svg'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+      .then(cache => cache.addAll(CORE_URLS))
       .then(() => self.skipWaiting())
   );
 });
@@ -26,16 +27,37 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Só trata requisições GET da mesma origem (nada de API externa / QR externo)
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+  // Nunca intercepta o próprio SW nem o manifest (evita loop / versão presa).
+  if (url.pathname.endsWith('/sw.js') || url.pathname.endsWith('sw.js')) return;
+  if (url.pathname.endsWith('/manifest.json') || url.pathname.endsWith('manifest.json')) return;
+
+  const isNavigation =
+    event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigation) {
+    // Network-first: deploy novo aparece no primeiro load com rede;
+    // sem rede, serve o index.html do cache.
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put('/index.html', clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/index.html').then(hit => hit || caches.match('/')))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then(cached => {
-      // Cache-first com atualização em segundo plano: offline funciona sempre,
-      // e quando há rede os arquivos são revalidados no cache.
       const fetchPromise = fetch(event.request)
         .then(response => {
           if (response && response.status === 200) {
@@ -49,4 +71,4 @@ self.addEventListener('fetch', event => {
       return cached || fetchPromise;
     })
   );
-});
+});

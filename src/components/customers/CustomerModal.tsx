@@ -47,8 +47,15 @@ export function CustomerModal({ onClose, customerToEdit }: CustomerModalProps) {
     try {
       const now = new Date().toISOString();
       if (customerToEdit) {
+        // debtBalance é derivado do extrato (debtRecords): nunca editável
+        // manualmente, senão saldo diverge do histórico sem trilha.
         await db.customers.update(customerToEdit.id, {
-          ...formData,
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          document: formData.document,
+          creditLimit: formData.creditLimit,
+          notes: formData.notes,
           updatedAt: now
         });
         toast.success('Cliente atualizado com sucesso!');

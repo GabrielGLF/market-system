@@ -145,11 +145,13 @@ export function PriceCalculator() {
     try {
       const prod = selectedProduct;
       const newSellPrice = mode === 'PRICE_TO_COST' ? targetSellPrice : calculatedSellPrice;
-      const newCostPrice = mode === 'PRICE_TO_COST' ? calculatedCost : cost;
 
+      // Custo NUNCA é sobrescrito pela calculadora: custo real só entra via
+      // compra (applyStockIn com média ponderada). O modo PRICE_TO_COST calcula
+      // o custo MÁXIMO suportado (teto), não o custo efetivo — gravá-lo como
+      // costPrice corromperia CMV/margem/ABC.
       await db.products.update(prod.id, {
         sellPrice: Number(newSellPrice.toFixed(2)),
-        costPrice: Number(newCostPrice.toFixed(2)),
         updatedAt: new Date().toISOString()
       });
 
@@ -160,7 +162,7 @@ export function PriceCalculator() {
         oldSellPrice: prod.sellPrice,
         newSellPrice: Number(newSellPrice.toFixed(2)),
         oldCostPrice: prod.costPrice,
-        newCostPrice: Number(newCostPrice.toFixed(2)),
+        newCostPrice: prod.costPrice,
         oldMargin: prod.sellPrice > 0 ? ((prod.sellPrice - prod.costPrice) / prod.sellPrice) * 100 : 0,
         newMargin: effectiveMargin,
         changePercentage: prod.sellPrice > 0 ? ((newSellPrice - prod.sellPrice) / prod.sellPrice) * 100 : 0,
@@ -169,8 +171,8 @@ export function PriceCalculator() {
       });
 
       // Mantém o produto selecionado coerente com o banco (o chip mostra o preço novo)
-      setProducts(prev => prev.map(p => (p.id === prod.id ? { ...p, sellPrice: Number(newSellPrice.toFixed(2)), costPrice: Number(newCostPrice.toFixed(2)) } : p)));
-      setSelectedProduct(p => (p && p.id === prod.id ? { ...p, sellPrice: Number(newSellPrice.toFixed(2)), costPrice: Number(newCostPrice.toFixed(2)) } : p));
+      setProducts(prev => prev.map(p => (p.id === prod.id ? { ...p, sellPrice: Number(newSellPrice.toFixed(2)) } : p)));
+      setSelectedProduct(p => (p && p.id === prod.id ? { ...p, sellPrice: Number(newSellPrice.toFixed(2)) } : p));
 
       toast.success(`Preço de "${prod.name}" gravado: ${formatCurrency(newSellPrice)}.`);
     } catch {

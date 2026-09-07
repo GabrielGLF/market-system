@@ -29,7 +29,7 @@ export function DebtPaymentModal({ onClose, customer }: DebtPaymentModalProps) {
     try {
       const now = new Date().toISOString();
 
-      await db.transaction('rw', [db.customers, db.debtRecords], async () => {
+      await db.transaction('rw', [db.customers, db.debtRecords, db.cashSessions, db.cashMovements], async () => {
         // Relê o cliente DENTRO da transação: o saldo da tela pode estar
         // defasado, e o histórico da dívida nunca pode divergir do saldo atual.
         const freshCustomer = await db.customers.get(customer.id);
@@ -60,6 +60,41 @@ export function DebtPaymentModal({ onClose, customer }: DebtPaymentModalProps) {
           debtBalance: newBalance,
           updatedAt: now
         });
+
+        // Recebimento entra no caixa: antes o dinheiro físico entrava e o
+        // sistema não via (gaveta física > sistema sem trilha). Agora espelha
+        // no totalSales e, se for dinheiro, na gaveta — sempre na sessão aberta.
+        const method = paymentMethod as 'PIX' | 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD';
+        const openSession = await db.cashSessions.where('status').equals('OPEN').first();
+        if (method === 'CASH') {
+          if (!openSession) {
+            throw new Error('Abra o caixa para receber em dinheiro.');
+          }
+          const totals = { ...openSession.totalSales };
+          totals.cash = Number((totals.cash + Number(amount)).toFixed(2));
+          totals.total = Number((totals.total + Number(amount)).toFixed(2));
+          await db.cashSessions.update(openSession.id, {
+            totalSales: totals,
+            expectedCashInDrawer: Number((openSession.expectedCashInDrawer + Number(amount)).toFixed(2)),
+            currentBalance: Number((openSession.expectedCashInDrawer + Number(amount)).toFixed(2))
+          });
+          await db.cashMovements.add({
+            id: crypto.randomUUID(),
+            sessionId: openSession.id,
+            type: 'SUPPLY',
+            amount: Number(amount),
+            reason: `Recebimento fiado — ${freshCustomer.name}`,
+            date: now
+          });
+        } else if (openSession && (method === 'PIX' || method === 'CREDIT_CARD' || method === 'DEBIT_CARD')) {
+          // Pix/cartão não passam pela gaveta, mas compõem o total da sessão.
+          const totals = { ...openSession.totalSales };
+          if (method === 'PIX') totals.pix = Number((totals.pix + Number(amount)).toFixed(2));
+          else if (method === 'CREDIT_CARD') totals.credit = Number((totals.credit + Number(amount)).toFixed(2));
+          else if (method === 'DEBIT_CARD') totals.debit = Number((totals.debit + Number(amount)).toFixed(2));
+          totals.total = Number((totals.total + Number(amount)).toFixed(2));
+          await db.cashSessions.update(openSession.id, { totalSales: totals });
+        }
       });
 
       toast.success('Pagamento registrado com sucesso!');

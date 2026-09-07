@@ -1,7 +1,6 @@
 import { db } from '../db';
 import type { Sale, SaleItem, SaleRefund, SaleRefundItem, PaymentMethodEntry } from '../types';
 import { toPackUnits } from './calc';
-import { computeWeightedAverageCost } from './inventory';
 
 export interface ReturnRequestItem {
   /** productId do item NA VENDA (pode terminar em '-alt' para frações) */
@@ -124,12 +123,24 @@ export function computePartialReturn(
   const newDiscount = Math.max(0, round2(newSubtotal - newTotal));
   const newProfit = round2(newTotal - newCostTotal);
 
-  // Reembolso proporcional entre as formas de pagamento originais
+  // Reembolso proporcional entre as formas de pagamento originais.
+  // Dinheiro usa o valor LÍQUIDO (recebido − troco): o pm.amount do CASH é o
+  // bruto recebido, e ratear pelo bruto inflaria o reembolso em cash.
+  // O troco sai integralmente da gaveta (mesma regra do PDV).
   const paymentRefunds: PaymentMethodEntry[] = [];
   if (oldTotal > 0 && refund > 0) {
+    const totalPaidGross = sale.paymentMethods.reduce((acc, pm) => acc + pm.amount, 0);
+    const saleChange = Math.max(0, totalPaidGross - oldTotal);
+    const cashPms = sale.paymentMethods.filter(pm => pm.method === 'CASH');
+    const cashGross = cashPms.reduce((acc, pm) => acc + pm.amount, 0);
+    const cashNetTotal = Math.max(0, cashGross - saleChange);
+    const netContrib = (pm: PaymentMethodEntry): number => {
+      if (pm.method !== 'CASH' || cashGross <= 0) return pm.amount;
+      return (pm.amount / cashGross) * cashNetTotal;
+    };
     const shares = sale.paymentMethods.map(pm => ({
       method: pm.method,
-      amount: round2(refund * (pm.amount / oldTotal))
+      amount: round2(refund * (netContrib(pm) / oldTotal))
     }));
     const assigned = shares.reduce((acc, s) => acc + s.amount, 0);
     const diff = round2(refund - assigned);
@@ -234,19 +245,34 @@ export async function applyPartialReturn(
   const fiadoRefund = paymentRefunds.find(p => p.method === 'FIADO')?.amount || 0;
 
   await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
+    // Idempotência: relê a venda fresca dentro da transação. Duas devoluções
+    // concorrentes calculadas sobre o mesmo snapshot não podem duplicar.
+    const fresh = await db.sales.get(sale.id);
+    if (!fresh) throw new Error('Venda não encontrada.');
+    if (fresh.status === 'CANCELLED') throw new Error('Venda já está cancelada.');
+    const alreadyRefunded = fresh.refundedAmount || 0;
+    const freshTotal = fresh.total;
+    // Se outra devolução entrou no meio, os totais mudaram: aborta e pede
+    // para recarregar (nunca aplica cálculo stale sobre a venda).
+    if (Math.abs(freshTotal - sale.total) > 0.0001 || Math.abs(alreadyRefunded - (sale.refundedAmount || 0)) > 0.0001) {
+      throw new Error('Esta venda foi alterada por outra devolução. Recarregue e tente novamente.');
+    }
+
     // 1. Venda ajustada (itens/totais/pagamentos líquidos + trilha de devoluções)
     // put() substitui o registro inteiro com o mesmo id (update() só aceita UpdateSpec)
     await db.sales.put(adjustedSale);
 
-    // 2. Repor estoque com movimentação RETURN auditável — os itens devolvidos
-    // voltam ao custo médio ponderado pelo custo que SAÍRAM na venda.
+    // 2. Repor estoque com movimentação RETURN auditável — a devolução repõe
+    // SÓ a quantidade (avgCostAfter = custo médio atual). Reponderar a média
+    // com o custo antigo da venda puxaria o custo para baixo sem base
+    // econômica quando houve compra mais cara depois.
     for (const r of restocks) {
       const product = await db.products.get(r.productId);
       if (!product) continue; // produto removido do cadastro: não há estoque para repor
       const previousStock = product.stock;
       const newStock = round3(previousStock + r.quantity);
-      const newAvgCost = computeWeightedAverageCost(previousStock, product.costPrice || 0, r.quantity, r.costPrice);
-      await db.products.update(product.id, { stock: newStock, costPrice: newAvgCost, updatedAt: now });
+      const currentAvg = product.costPrice || 0;
+      await db.products.update(product.id, { stock: newStock, updatedAt: now });
       await db.stockMovements.add({
         id: crypto.randomUUID(),
         productId: product.id,
@@ -258,7 +284,7 @@ export async function applyPartialReturn(
         reason: `Devolução parcial da venda #${sale.saleNumber}: ${reason}`,
         date: now,
         costPrice: r.costPrice,
-        avgCostAfter: newAvgCost,
+        avgCostAfter: currentAvg,
         totalCost: round2(r.quantity * r.costPrice)
       });
     }
@@ -284,11 +310,14 @@ export async function applyPartialReturn(
       }
     }
 
-    // 4. Reduzir fiado do cliente (reembolso em caderneta não sai da gaveta)
+    // 4. Reduzir fiado do cliente (reembolso em caderneta não sai da gaveta).
+    // Nunca deixa o saldo negativo: se o cliente já amortizou parte, o
+    // excedente vira zero (sem crédito fantasma) em vez de dívida negativa.
     if (fiadoRefund > 0 && sale.customerId) {
       const customer = await db.customers.get(sale.customerId);
       if (customer) {
-        const newBalance = round2(customer.debtBalance - fiadoRefund);
+        const prev = customer.debtBalance || 0;
+        const newBalance = Math.max(0, round2(prev - fiadoRefund));
         await db.customers.update(customer.id, { debtBalance: newBalance, updatedAt: now });
         await db.debtRecords.add({
           id: crypto.randomUUID(),

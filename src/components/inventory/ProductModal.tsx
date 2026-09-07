@@ -177,13 +177,53 @@ export function ProductModal({ isOpen, onClose, product, productToEdit, onSave, 
     };
 
     if (currentProd) {
+      const oldStock = Number(currentProd.stock || 0);
+      const newStock = Number(formData.stock || 0);
       await db.products.update(currentProd.id, { ...payload, updatedAt: now });
+      // Estoque nunca muda sem movimentação: gera ADJUST auditável para que
+      // Σ(movimentações) feche com o saldo e o valor em estoque seja rastreável.
+      if (Math.abs(newStock - oldStock) > 0.0001) {
+        const avgCost = Number(formData.costPrice || 0);
+        await db.stockMovements.add({
+          id: crypto.randomUUID(),
+          productId: currentProd.id,
+          productName: formData.name || currentProd.name,
+          type: 'ADJUST',
+          quantity: Number(Math.abs(newStock - oldStock).toFixed(3)),
+          previousStock: oldStock,
+          newStock,
+          reason: `Ajuste via cadastro de produto (${oldStock} → ${newStock})`,
+          date: now,
+          costPrice: avgCost,
+          avgCostAfter: avgCost,
+          totalCost: Number((Math.abs(newStock - oldStock) * avgCost).toFixed(2))
+        });
+      }
     } else {
       productId = crypto.randomUUID();
       payload.id = productId;
       payload.createdAt = now;
       payload.updatedAt = now;
       await db.products.add(payload);
+      // Estoque inicial também gera IN para fechar com computeInventoryValueFromMovements.
+      const initialStock = Number(formData.stock || 0);
+      if (initialStock > 0) {
+        const avgCost = Number(formData.costPrice || 0);
+        await db.stockMovements.add({
+          id: crypto.randomUUID(),
+          productId,
+          productName: formData.name || 'Produto',
+          type: 'IN',
+          quantity: Number(initialStock.toFixed(3)),
+          previousStock: 0,
+          newStock: initialStock,
+          reason: 'Estoque inicial — cadastro de produto',
+          date: now,
+          costPrice: avgCost,
+          avgCostAfter: avgCost,
+          totalCost: Number((initialStock * avgCost).toFixed(2))
+        });
+      }
     }
 
     // Histórico íntegro de preço/custo: só para produtos EXISTENTES (produto novo

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { SaleItem, PaymentMethodType } from '../types';
+import { createBroadcastChannel } from '../utils/browser';
 
 export interface CustomerDisplayState {
   status: 'IDLE' | 'CART' | 'PAYMENT' | 'COMPLETE';
@@ -28,33 +29,49 @@ export function useCustomerDisplay(isDisplay = false) {
   const [channel, setChannel] = useState<BroadcastChannel | null>(null);
 
   useEffect(() => {
-    const bc = new BroadcastChannel(CHANNEL_NAME);
+    const bc = createBroadcastChannel(CHANNEL_NAME);
+    if (!bc) return; // WebView antiga sem BroadcastChannel: display usa polling do __lastCustomerDisplayState
     setChannel(bc);
 
     if (isDisplay) {
       bc.onmessage = (event) => {
-        if (event.data.type === 'SYNC_STATE') {
-          setState(event.data.state);
+        const data = event?.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type === 'SYNC_STATE' && data.state && typeof data.state === 'object') {
+          setState(data.state);
         }
       };
       
       // Request initial state on mount
-      bc.postMessage({ type: 'REQUEST_STATE' });
+      try {
+        bc.postMessage({ type: 'REQUEST_STATE' });
+      } catch {
+        // ignora: canal indisponível
+      }
     } else {
       bc.onmessage = (event) => {
-        if (event.data.type === 'REQUEST_STATE') {
+        if (event?.data?.type === 'REQUEST_STATE') {
           // A display requested state, broadcast current state
           // Using a functional approach or ref for state might be needed here, 
           // but we can trust the broadcast for now.
-          bc.postMessage({ type: 'SYNC_STATE', state: window.__lastCustomerDisplayState || {
-             status: 'IDLE', items: [], subtotal: 0, discount: 0, total: 0 
-          } });
+          try {
+            bc.postMessage({ type: 'SYNC_STATE', state: window.__lastCustomerDisplayState || {
+               status: 'IDLE', items: [], subtotal: 0, discount: 0, total: 0
+            } });
+          } catch {
+            // ignora
+          }
         }
       };
     }
 
     return () => {
-      bc.close();
+      try {
+        bc.close();
+      } catch {
+        // ignora
+      }
+      setChannel(null);
     };
   }, [isDisplay]);
 
@@ -63,9 +80,17 @@ export function useCustomerDisplay(isDisplay = false) {
     
     setState((prev) => {
       const updated = { ...prev, ...newState };
-      window.__lastCustomerDisplayState = updated;
+      try {
+        window.__lastCustomerDisplayState = updated;
+      } catch {
+        // ignora (SSR/testes)
+      }
       if (channel) {
-        channel.postMessage({ type: 'SYNC_STATE', state: updated });
+        try {
+          channel.postMessage({ type: 'SYNC_STATE', state: updated });
+        } catch {
+          // canal fechado: display ainda lê via __lastCustomerDisplayState
+        }
       }
       return updated;
     });

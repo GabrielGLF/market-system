@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { 
-  X, CreditCard, Banknote, QrCode, Ticket, 
-  BookUser, Plus, Trash2, Copy, Check, AlertCircle 
+import {
+  X, CreditCard, Banknote, QrCode, Ticket,
+  BookUser, Plus, Trash2, Copy, Check, AlertCircle
 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { formatCurrency, normalizeText } from '../../utils/format';
+import { copyTextSafe } from '../../utils/browser';
 import { SmartChangeDisplay } from './SmartChangeDisplay';
 import type { PaymentMethodType, PaymentMethodEntry, Customer } from '../../types';
 import { toast } from 'sonner';
@@ -58,9 +60,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   useEffect(() => {
     if (currentMethod === 'PIX' && remaining > 0) {
-      onPaymentChange(totalPaid, change, currentMethod, { 
-        qr: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixKey)}`, 
-        key: pixKey 
+      // QR 100% offline: renderizado localmente a partir da chave (sem
+      // api.qrserver.com, que quebrava sem rede e vazava a chave Pix).
+      onPaymentChange(totalPaid, change, currentMethod, {
+        qr: pixKey,
+        key: pixKey
       });
     } else {
       onPaymentChange(totalPaid, change, payments.length > 0 ? payments[0].method : currentMethod);
@@ -118,11 +122,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  const handleCopyPix = () => {
-    navigator.clipboard.writeText(pixKey);
-    setCopiedPix(true);
-    toast.success('Chave Pix copiada para a área de transferência!');
-    setTimeout(() => setCopiedPix(false), 2500);
+  const handleCopyPix = async () => {
+    const ok = await copyTextSafe(pixKey);
+    if (ok) {
+      setCopiedPix(true);
+      toast.success('Chave Pix copiada para a área de transferência!');
+      setTimeout(() => setCopiedPix(false), 2500);
+    } else {
+      toast.error('Não foi possível copiar. Anote a chave manualmente.');
+    }
   };
 
   const paymentMethods: { id: PaymentMethodType; label: string; icon: any }[] = [
@@ -212,21 +220,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
-          {/* Se for Pix: Chave da Loja */}
+          {/* Se for Pix: Chave da Loja + QR offline */}
           {currentMethod === 'PIX' && (
             <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-md border border-slate-200 dark:border-slate-700 text-center space-y-2">
               <div className="font-semibold text-slate-600 dark:text-slate-300 text-xs">
                 Chave Pix da loja
               </div>
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2 rounded-md flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-slate-800 dark:text-slate-200 truncate">{pixKey}</span>
-                <button 
-                  onClick={handleCopyPix}
-                  className="px-2.5 py-1 bg-slate-900 dark:bg-slate-100 dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-white text-white rounded text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors"
-                >
-                  {copiedPix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copiedPix ? 'Copiado' : 'Copiar'}
-                </button>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-md flex flex-col items-center gap-2">
+                <QRCode value={pixKey} size={140} bgColor="transparent" fgColor="currentColor" className="text-slate-900 dark:text-white" />
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="font-mono text-xs text-slate-800 dark:text-slate-200 truncate">{pixKey}</span>
+                  <button
+                    onClick={handleCopyPix}
+                    className="px-2.5 py-1 bg-slate-900 dark:bg-slate-100 dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-white text-white rounded text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors"
+                  >
+                    {copiedPix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedPix ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

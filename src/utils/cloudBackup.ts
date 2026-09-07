@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { exportDatabaseToJson } from './export';
 import { getSupabaseClient, isCloudConfigured } from './cloudConfig';
+import { canUseSubtleCrypto, isSecureContextSafe } from './browser';
 
 /**
  * Backup automático na nuvem (Supabase Storage, bucket privado `backups`).
@@ -41,6 +42,9 @@ async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>): Promi
  * o Supabase.
  */
 export async function encryptJson(json: string, password: string): Promise<string> {
+  if (!canUseSubtleCrypto() || !isSecureContextSafe()) {
+    throw new Error('Criptografia exige HTTPS ou localhost (contexto seguro). Sem isso, faça o backup sem senha.');
+  }
   const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(16)));
   const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)));
   const key = await deriveKey(password, salt);
@@ -65,6 +69,9 @@ export async function encryptJson(json: string, password: string): Promise<strin
 }
 
 export async function decryptJson(payload: string, password: string): Promise<string> {
+  if (!canUseSubtleCrypto()) {
+    throw new Error('Este dispositivo/navegador não suporta descriptografia (WebCrypto indisponível).');
+  }
   const parsed = JSON.parse(payload) as { salt: string; iv: string; data: string };
   const unb64 = (s: string): Uint8Array<ArrayBuffer> => {
     const raw = atob(s);

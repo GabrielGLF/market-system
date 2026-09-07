@@ -7,7 +7,7 @@ import {
   Sparkles, ArrowUpRight, BarChart3, PieChart as PieIcon,
   ArrowRightLeft, ArrowDownLeft, ShoppingBag, ShoppingCart,
   Boxes, ShieldAlert, CheckCircle2, RotateCcw, Flame,
-  TrendingDown, Shuffle, Zap, AlertCircle
+  TrendingDown, Shuffle, Zap, AlertCircle, Lightbulb
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -23,9 +23,18 @@ import {
 } from '../utils/analytics';
 import type { SalesPeriod } from '../utils/analytics';
 import { chartTooltip, CHART_PALETTE } from '../utils/chart';
+import { PageHeader } from '../components/ui';
 import type { Product, Sale, StockMovement, Category, Customer } from '../types';
 
 const CHART_NEUTRAL = '#64748b';
+
+/** Parâmetros únicos da inteligência de reposição (antes: 5d no Financial e 7d
+ *  no actionCenter, divergentes). Lead time + segurança vêm do varejo de
+ *  balcão: 7 dias cobrem o ciclo semanal de entrega + fim de semana. */
+const LEAD_TIME_DAYS = 7;
+const CRITICAL_COVERAGE_DAYS = 3;
+const WARNING_COVERAGE_DAYS = 7;
+const EXCESS_COVERAGE_DAYS = 45;
 
 export function Financial() {
   const [activeTab, setActiveTab] = useState<'financial' | 'inventory_flow' | 'abc_profit' | 'cross_sell' | 'customer_credit'>('financial');
@@ -129,11 +138,14 @@ export function Financial() {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const projecaoMensal = (currentMonthRevenue / currentDayOfMonth) * daysInMonth;
 
-  // Ponto de Equilíbrio
+  // Ponto de Equilíbrio — sem margem real não há break-even: mostra "—" em vez
+  // de inventar margem de 35% que faria a meta parecer dado.
   const totalCustosFixos = custoAluguel + custoEnergia + custoSalarios;
-  const margemContribuicaoCalc = margemMedia > 0 ? margemMedia / 100 : 0.35;
-  const pontoEquilibrio = totalCustosFixos / margemContribuicaoCalc;
-  const percentualPontoAtingido = Math.min(100, Math.round((currentMonthRevenue / (pontoEquilibrio || 1)) * 100));
+  const margemContribuicaoCalc = margemMedia > 0 ? margemMedia / 100 : null;
+  const pontoEquilibrio = margemContribuicaoCalc ? totalCustosFixos / margemContribuicaoCalc : null;
+  const percentualPontoAtingido = pontoEquilibrio
+    ? Math.min(100, Math.round((currentMonthRevenue / (pontoEquilibrio || 1)) * 100))
+    : 0;
 
   // --- 3. INTELIGÊNCIA DE ESTOQUE & FLUXOS (ENTRADAS, SAÍDAS, PERDAS, GIRO & AUTONOMIA) ---
   const activeProducts = products.filter(p => p.isActive);
@@ -152,10 +164,11 @@ export function Financial() {
   // Taxa de Perda / Avaria (Shrinkage Rate %)
   const taxaAvariaPercent = totalFaturamento > 0 ? (totalAvariasPerdasValor / totalFaturamento) * 100 : 0;
 
-  // Giro de Estoque (Turnover & DIO - Days of Inventory Outstanding)
+  // Giro de Estoque (Turnover & DIO - Days of Inventory Outstanding).
+  // Sem giro no período não há DIO: null (exibe "—") em vez de 45 inventado.
   const custoMercadoriasVendidas = filteredSales.reduce((acc, s) => acc + (s.costTotal || 0), 0);
   const giroEstoque = valorTotalEstoqueCusto > 0 ? Number((custoMercadoriasVendidas / valorTotalEstoqueCusto).toFixed(2)) : 0;
-  const diasGiroEstoqueDIO = giroEstoque > 0 ? Math.round((30 / giroEstoque)) : 45;
+  const diasGiroEstoqueDIO = giroEstoque > 0 ? Math.round((30 / giroEstoque)) : null;
 
   // Cálculo de Autonomia (Cobertura de Estoque) e Sugestão de Compra por Produto
   const productAnalyticsList = activeProducts.map(p => {
@@ -167,16 +180,21 @@ export function Financial() {
     const productSales30d = velocity30dMap.get(p.id) || 0;
 
     const mediaDiariaVendas = productSales30d / 30;
-    const diasAutonomia = mediaDiariaVendas > 0 ? Math.round(p.stock / mediaDiariaVendas) : (p.stock > 0 ? 999 : 0);
+    // Sem venda em 30d não há autonomia calculável: null (exibe "∞"/"sem giro")
+    // em vez de 999 mágico que poluía médias e ordenações.
+    const diasAutonomia = mediaDiariaVendas > 0
+      ? Math.round(p.stock / mediaDiariaVendas)
+      : (p.stock > 0 ? null : 0);
 
-    // Sugestão de Reposição: (Consumo Diário * Prazo Fornecedor de 5 dias) + Estoque de Segurança
-    const pontoDePedido = Math.ceil((mediaDiariaVendas * 5) + p.minStock);
+    // Sugestão de Reposição: (Consumo Diário × Lead time) + Estoque de Segurança.
+    const pontoDePedido = Math.ceil((mediaDiariaVendas * LEAD_TIME_DAYS) + p.minStock);
     const sugestaoCompra = Math.max(0, pontoDePedido - Math.floor(p.stock));
 
     let statusAutonomia: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'EXCESS' = 'HEALTHY';
-    if (p.stock <= 0 || diasAutonomia < 3) statusAutonomia = 'CRITICAL';
-    else if (diasAutonomia <= 7) statusAutonomia = 'WARNING';
-    else if (diasAutonomia > 45 && p.stock > p.minStock * 2) statusAutonomia = 'EXCESS';
+    const coverage = diasAutonomia ?? Number.POSITIVE_INFINITY;
+    if (p.stock <= 0 || coverage < CRITICAL_COVERAGE_DAYS) statusAutonomia = 'CRITICAL';
+    else if (coverage <= WARNING_COVERAGE_DAYS) statusAutonomia = 'WARNING';
+    else if (coverage > EXCESS_COVERAGE_DAYS && p.stock > p.minStock * 2) statusAutonomia = 'EXCESS';
 
     return {
       product: p,
@@ -211,11 +229,14 @@ export function Financial() {
   });
 
   // --- 4. CURVA ABC & RENTABILIDADE POR PRODUTO / CATEGORIA ---
+  // Mapas O(1): antes, products.find() dentro do loop de itens era O(vendas×produtos).
+  const productById = new Map(products.map(p => [p.id, p]));
+  const categoryById = new Map(categories.map(c => [c.id, c]));
   const productRevenueMap = new Map<string, { name: string; revenue: number; profit: number; qty: number; categoryId?: string }>();
   filteredSales.forEach(s => {
     s.items.forEach(item => {
       const rawId = item.productId.replace('-alt', '');
-      const prod = products.find(p => p.id === rawId);
+      const prod = productById.get(rawId);
       const current = productRevenueMap.get(rawId) || { 
         name: prod?.name || item.productName, 
         revenue: 0, 
@@ -259,12 +280,12 @@ export function Financial() {
     .sort((a, b) => b.lucro - a.lucro)
     .slice(0, 8);
 
-  // Vendas por Categoria & Pareto
+  // Vendas por Categoria & Pareto (usa os mesmos mapas O(1) acima)
   const categorySalesMap = new Map<string, { faturamento: number; lucro: number }>();
   filteredSales.forEach(s => {
     s.items.forEach(item => {
-      const prod = products.find(p => p.id === item.productId.replace('-alt', ''));
-      const cat = categories.find(c => c.id === prod?.categoryId);
+      const prod = productById.get(item.productId.replace('-alt', ''));
+      const cat = prod?.categoryId ? categoryById.get(prod.categoryId) : undefined;
       const catName = cat?.name || 'Geral';
       const cur = categorySalesMap.get(catName) || { faturamento: 0, lucro: 0 };
       cur.faturamento += item.total;
@@ -299,8 +320,14 @@ export function Financial() {
     else if (totalQty <= 5) basketSizeDistribution['4 a 5 itens']++;
     else basketSizeDistribution['6+ itens']++;
 
-    // Pares de produtos comprados juntos
-    const uniqueItemNames = Array.from(new Set(s.items.map(i => i.productName.replace(/\s\(.*\)/, ''))));
+    // Pares de produtos comprados juntos — receita do par = soma dos dois itens
+    // (antes somava o total do cupom por par, inflando N× em vendas com N pares).
+    const totalByName = new Map<string, number>();
+    for (const it of s.items) {
+      const nm = it.productName.replace(/\s\(.*\)/, '');
+      totalByName.set(nm, (totalByName.get(nm) || 0) + it.total);
+    }
+    const uniqueItemNames = Array.from(totalByName.keys());
     for (let i = 0; i < uniqueItemNames.length; i++) {
       for (let j = i + 1; j < uniqueItemNames.length; j++) {
         const prodA = uniqueItemNames[i];
@@ -308,7 +335,7 @@ export function Financial() {
         const key = [prodA, prodB].sort().join(' + ');
         const cur = pairCountMap.get(key) || { prodA, prodB, count: 0, revenue: 0 };
         cur.count++;
-        cur.revenue += s.total;
+        cur.revenue += (totalByName.get(prodA) || 0) + (totalByName.get(prodB) || 0);
         pairCountMap.set(key, cur);
       }
     }
@@ -330,8 +357,10 @@ export function Financial() {
   const taxaComprometimentoCredito = totalLimiteConcedido > 0 ? (totalFiadoReceber / totalLimiteConcedido) * 100 : 0;
 
   const totalVendasFiadoValor = filteredSales.reduce((acc, s) => {
-    const fiadoPm = s.paymentMethods.find(m => m.method === 'FIADO');
-    return acc + (fiadoPm ? fiadoPm.amount : 0);
+    const fiadoSum = s.paymentMethods
+      .filter(m => m.method === 'FIADO')
+      .reduce((sum, m) => sum + m.amount, 0);
+    return acc + fiadoSum;
   }, 0);
   const taxaPenetracaoFiado = totalFaturamento > 0 ? (totalVendasFiadoValor / totalFaturamento) * 100 : 0;
 
@@ -348,7 +377,8 @@ export function Financial() {
     })
     .sort((a, b) => b.totalPurchased - a.totalPurchased);
 
-  // Heatmap Matriz Horários de Pico
+  // Heatmap Matriz Horários de Pico — UMA passada sobre as vendas (antes: 42
+  // filters sobre o histórico a cada render).
   const daysOfWeek = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const hourRanges = [
     { label: '06-09h', min: 6, max: 9 },
@@ -359,16 +389,21 @@ export function Financial() {
     { label: '21-23h', min: 21, max: 23 },
   ];
 
-  const heatmapMatrix = daysOfWeek.map((day, dayIndex) => {
-    const hoursCount = hourRanges.map(range => {
-      return filteredSales.filter(s => {
-        const d = new Date(s.date);
-        const h = d.getHours();
-        return d.getDay() === dayIndex && h >= range.min && h < range.max;
-      }).length;
-    });
-    return { day, hours: hoursCount };
-  });
+  const heatmapMatrix = (() => {
+    const counts = daysOfWeek.map(() => hourRanges.map(() => 0));
+    for (const s of filteredSales) {
+      const d = new Date(s.date);
+      const day = d.getDay();
+      const h = d.getHours();
+      for (let r = 0; r < hourRanges.length; r++) {
+        if (h >= hourRanges[r].min && h < hourRanges[r].max) {
+          counts[day][r]++;
+          break;
+        }
+      }
+    }
+    return daysOfWeek.map((day, dayIndex) => ({ day, hours: counts[dayIndex] }));
+  })();
 
   const showHelp = (title: string, def: string, tip: string, form?: string) => {
     setHelpInfo({ title, definition: def, tip, formula: form });
@@ -385,101 +420,60 @@ export function Financial() {
   );
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* Header & Período */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2.5">
-            <BarChart3 className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
-            Central de Inteligência & Índices Comerciais
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Estatísticas avançadas de vendas, movimentações de estoque, giro, cross-selling e caderneta.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+    <div className="space-y-5 pb-16">
+      <PageHeader
+        title="Painel financeiro"
+        subtitle="Faturamento, estoque, curva ABC, cross-selling e caderneta — tudo do período selecionado."
+        actions={
           <select
             value={period}
             onChange={e => setPeriod(e.target.value as any)}
-            className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 shadow-sm outline-none cursor-pointer"
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none cursor-pointer"
+            aria-label="Período"
           >
             <option value="today">Hoje</option>
             <option value="7d">Últimos 7 dias</option>
             <option value="30d">Últimos 30 dias</option>
-            <option value="month">Este Mês</option>
-            <option value="year">Este Ano</option>
-            <option value="all">Todo o Histórico</option>
+            <option value="month">Este mês</option>
+            <option value="year">Este ano</option>
+            <option value="all">Todo o histórico</option>
           </select>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Navegação por Abas Especializadas */}
-      <div className="flex overflow-x-auto gap-2 p-1.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-2xl">
-        <button
-          onClick={() => setActiveTab('financial')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'financial'
-              ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <DollarSign className="w-4 h-4 text-emerald-600" />
-          Faturamento & Lucratividade
-        </button>
-
-        <button
-          onClick={() => setActiveTab('inventory_flow')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'inventory_flow'
-              ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <Boxes className="w-4 h-4 text-blue-600" />
-          Inteligência de Estoque & Fluxos
-          {criticalAutonomyCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[10px]">
-              {criticalAutonomyCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('abc_profit')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'abc_profit'
-              ? 'bg-white dark:bg-slate-700 text-violet-700 dark:text-violet-300 shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-violet-600" />
-          Curva ABC & Rentabilidade
-        </button>
-
-        <button
-          onClick={() => setActiveTab('cross_sell')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'cross_sell'
-              ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4 text-amber-600" />
-          Cesta de Compras & Cross-Selling
-        </button>
-
-        <button
-          onClick={() => setActiveTab('customer_credit')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'customer_credit'
-              ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
-        >
-          <Users className="w-4 h-4 text-purple-600" />
-          Clientes & Caderneta (Fiado)
-        </button>
+      {/* Navegação por abas */}
+      <div className="flex overflow-x-auto gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+        {(
+          [
+            { id: 'financial', label: 'Faturamento', icon: DollarSign },
+            { id: 'inventory_flow', label: 'Estoque e fluxos', icon: Boxes, badge: criticalAutonomyCount > 0 ? criticalAutonomyCount : null },
+            { id: 'abc_profit', label: 'Curva ABC', icon: Sparkles },
+            { id: 'cross_sell', label: 'Cesta e cross-selling', icon: ShoppingCart },
+            { id: 'customer_credit', label: 'Clientes e fiado', icon: Users },
+          ] as const
+        ).map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                isActive
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+              {tab.label}
+              {'badge' in tab && tab.badge != null && (
+                <span className="px-1.5 py-px bg-rose-500 text-white rounded-full text-[10px] font-bold tabular-nums">
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ========================================================================= */}
@@ -539,7 +533,7 @@ export function Financial() {
                 <Layers className="w-4 h-4 text-rose-600" /> Ponto de Equilíbrio
               </span>
               <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">
-                {formatCurrency(pontoEquilibrio)}
+                {pontoEquilibrio != null ? formatCurrency(pontoEquilibrio) : '—'}
               </p>
               <span className="text-xs text-slate-400">{percentualPontoAtingido}% atingido no mês</span>
             </div>
@@ -641,7 +635,7 @@ export function Financial() {
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Margem Contribuição</label>
                   <div className="w-full border rounded-lg p-1.5 text-sm bg-slate-200/60 dark:bg-slate-700 font-bold">
-                    {(margemContribuicaoCalc * 100).toFixed(1)}%
+                    {margemContribuicaoCalc != null ? `${(margemContribuicaoCalc * 100).toFixed(1)}%` : '—'}
                   </div>
                 </div>
               </div>
@@ -649,8 +643,11 @@ export function Financial() {
               <div className="text-center p-4 border border-purple-200 dark:border-purple-800/60 bg-purple-50 dark:bg-purple-950/30 rounded-xl">
                 <span className="text-xs font-bold text-purple-800 dark:text-purple-300 uppercase">Faturamento Mínimo Mensal</span>
                 <div className="text-2xl sm:text-3xl font-black text-purple-900 dark:text-purple-200 mt-1">
-                  {formatCurrency(pontoEquilibrio)}
+                  {pontoEquilibrio != null ? formatCurrency(pontoEquilibrio) : '—'}
                 </div>
+                {pontoEquilibrio == null && (
+                  <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-1">Sem margem no período para calcular.</p>
+                )}
               </div>
             </div>
 
@@ -716,7 +713,9 @@ export function Financial() {
               <p className="text-2xl font-black text-slate-800 dark:text-white mt-2">
                 {giroEstoque}x <span className="text-xs font-normal text-slate-400">no período</span>
               </p>
-              <span className="text-xs text-blue-600 font-bold">Giro Médio: a cada ~{diasGiroEstoqueDIO} dias</span>
+              <span className="text-xs text-blue-600 font-bold">
+                {diasGiroEstoqueDIO != null ? `Giro Médio: a cada ~${diasGiroEstoqueDIO} dias` : 'Sem giro no período'}
+              </span>
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 relative">
@@ -801,8 +800,9 @@ export function Financial() {
                 </div>
               </div>
 
-              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl text-[11px] text-slate-500 border border-slate-200 dark:border-slate-700">
-                💡 <strong>Dica de Giro:</strong> Mantenha itens de alto giro (ex: bebidas, pães) com pedidos semanais e itens de baixo giro com reposição quinzenal para otimizar fluxo de caixa.
+              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl text-[11px] text-slate-500 border border-slate-200 dark:border-slate-700 flex gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span><strong>Dica de giro:</strong> Mantenha itens de alto giro (ex: bebidas, pães) com pedidos semanais e itens de baixo giro com reposição quinzenal para otimizar fluxo de caixa.</span>
               </div>
             </div>
           </div>
@@ -815,7 +815,7 @@ export function Financial() {
                   <Package className="w-4 h-4 text-emerald-600" />
                   Sugestão de Reposição & Dias de Autonomia por Produto
                 </h3>
-                <p className="text-xs text-slate-400">Calculado com base no consumo médio diário e tempo estimado de entrega de 5 dias.</p>
+                <p className="text-xs text-slate-400">Consumo médio diário e lead time de {LEAD_TIME_DAYS} dias.</p>
               </div>
             </div>
 
@@ -853,7 +853,7 @@ export function Financial() {
                       </td>
 
                       <td className="px-4 py-3 text-center font-bold">
-                        {item.diasAutonomia > 300 ? '∞' : `${item.diasAutonomia} dias`}
+                        {item.diasAutonomia == null ? '—' : item.diasAutonomia > 300 ? '∞' : `${item.diasAutonomia} dias`}
                       </td>
 
                       <td className="px-4 py-3 text-center">
@@ -1088,8 +1088,9 @@ export function Financial() {
                 </div>
               </div>
 
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 mt-4">
-                💡 <strong>Dica de Cross-Selling:</strong> Crie a promoção "Leve 1 {topCrossSellPairs[0]?.prodA || 'Item A'} + 1 {topCrossSellPairs[0]?.prodB || 'Item B'} com 5% de desconto" para aumentar a quantidade de itens por cesta.
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl text-[11px] text-slate-500 border border-slate-200 dark:border-slate-700 mt-4 flex gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span><strong>Dica de cross-selling:</strong> Crie a promoção "Leve 1 {topCrossSellPairs[0]?.prodA || 'Item A'} + 1 {topCrossSellPairs[0]?.prodB || 'Item B'} com 5% de desconto" para aumentar a quantidade de itens por cesta.</span>
               </div>
             </div>
           </div>

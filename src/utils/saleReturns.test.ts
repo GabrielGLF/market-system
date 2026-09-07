@@ -163,4 +163,26 @@ describe('computePartialReturn', () => {
     const result = computePartialReturn(makeSale(), [{ productId: 'p1', quantity: 0 }]);
     expect(result.ok).toBe(false);
   });
+
+  it('rateia pelo valor LÍQUIDO do dinheiro (recebido − troco), não pelo bruto', () => {
+    // Cupom de R$ 70 pago com R$ 100 em cash (troco 30): o líquido é 70.
+    const sale = makeSale({
+      items: [
+        { productId: 'p1', productName: 'Item 1', quantity: 1, unit: 'UN', unitPrice: 35, costPrice: 20, subtotal: 35, discount: 0, total: 35 },
+        { productId: 'p2', productName: 'Item 2', quantity: 1, unit: 'UN', unitPrice: 35, costPrice: 20, subtotal: 35, discount: 0, total: 35 }
+      ],
+      subtotal: 70,
+      total: 70,
+      costTotal: 40,
+      profit: 30,
+      paymentMethods: [{ method: 'CASH', amount: 100, details: { receivedAmount: 100, change: 30 } }]
+    });
+    const result = computePartialReturn(sale, [{ productId: 'p1', quantity: 1 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Devolve metade do cupom (35) — pelo líquido 70/70, não pelo bruto 100/70 (=50).
+    expect(result.refund).toBeCloseTo(35, 2);
+    expect(result.paymentRefunds).toEqual([{ method: 'CASH', amount: 35 }]);
+    expect(result.adjustedSale.paymentMethods.find(p => p.method === 'CASH')?.amount).toBeCloseTo(65, 2);
+  });
 });

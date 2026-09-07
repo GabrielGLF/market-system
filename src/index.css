@@ -9,6 +9,28 @@ html, body {
   background-color: #f8fafc;
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Números tabulares: valores monetários e KPIs alinham sem "dançar" */
+.tnum, table td.tabular, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Foco visível e discreto para navegação por teclado (PDV é keyboard-first) */
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background-color: #a7f3d0;
+  color: #064e3b;
+}
+.dark ::selection {
+  background-color: #065f46;
+  color: #ecfdf5;
 }
 
 .dark html, .dark body, html.dark, body.dark {

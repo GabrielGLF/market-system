@@ -401,24 +401,47 @@ export const PDV: React.FC = () => {
     try {
       // Tudo em uma transação atômica: venda + estoque + movimentações + fiado + caixa
       const sale: Sale = await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
+        // Unicidade do cupom DENTRO da transação: duas abas vendendo no mesmo
+        // milissegundo gerariam o mesmo `base` fora da tx; aqui o check vê o
+        // commit da outra transação (Dexie serializa RW) e gera sufixo.
+        let finalSaleNumber = saleNumber;
+        const taken = await db.sales.where('saleNumber').equals(finalSaleNumber).count();
+        if (taken > 0) {
+          let resolved = '';
+          for (let i = 0; i < 26; i++) {
+            const candidate = `${saleNumber}-${String.fromCharCode(65 + i)}`;
+            const used = await db.sales.where('saleNumber').equals(candidate).count();
+            if (!used) { resolved = candidate; break; }
+          }
+          finalSaleNumber = resolved || `${saleNumber}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+        }
         // CMV pelo custo médio REAL lido agora (o mesmo valor usado nas
-        // movimentações SALE abaixo — venda e estoque nunca divergem)
+        // movimentações SALE abaixo — venda e estoque nunca divergem).
+        // Frações (-alt) baixam estoque em pacotes (toPackUnits) e o CMV usa
+        // a mesma dedução; o costPrice do item é reescrito com o custo fresco
+        // para que Σ(item.costPrice×qtd) == costTotal == Σ(movements.totalCost).
         let costTotal = 0;
+        const freshItems = [];
         for (const item of cart) {
           const p = await db.products.get(item.productId.replace('-alt', ''));
           if (!p) {
             throw new Error(`Produto "${item.productName}" não encontrado no cadastro.`);
           }
-          costTotal += (p.costPrice || 0) * item.quantity;
+          const factor = item.isAlternativeUnit ? item.originalUnitFactor : undefined;
+          const deduction = toPackUnits(item.quantity, factor);
+          const avgCost = p.costPrice || 0;
+          costTotal += avgCost * deduction;
+          const freshCost = factor && factor > 0 ? Number((avgCost / factor).toFixed(4)) : avgCost;
+          freshItems.push({ ...item, costPrice: freshCost });
         }
         costTotal = Number(costTotal.toFixed(2));
         const profit = Number((total - costTotal).toFixed(2));
 
         const sale: Sale = {
           id: crypto.randomUUID(),
-          saleNumber,
+          saleNumber: finalSaleNumber,
           date: saleDate,
-          items: cart,
+          items: freshItems,
           subtotal,
           discount: globalDiscount,
           total,
@@ -437,7 +460,7 @@ export const PDV: React.FC = () => {
         await db.sales.add(sale);
 
         // 2. Baixar estoque e registrar movimentações pelo CUSTO MÉDIO real
-        for (const item of cart) {
+        for (const item of freshItems) {
           const rawProdId = item.productId.replace('-alt', '');
           const p = await db.products.get(rawProdId);
           if (p) {
@@ -446,7 +469,7 @@ export const PDV: React.FC = () => {
             const previousStock = p.stock;
             const newStock = Number((previousStock - deduction).toFixed(3));
 
-            if (newStock < 0) {
+            if (newStock < -0.0001) {
               throw new Error(`Estoque insuficiente para "${p.name}"`);
             }
 
@@ -463,7 +486,7 @@ export const PDV: React.FC = () => {
               quantity: Number(deduction.toFixed(3)),
               previousStock,
               newStock,
-              reason: `Venda PDV #${saleNumber}`,
+              reason: `Venda PDV #${finalSaleNumber}`,
               date: saleDate,
               costPrice: p.costPrice,
               avgCostAfter: p.costPrice,
@@ -472,32 +495,39 @@ export const PDV: React.FC = () => {
           }
         }
 
-        // 3. Atualizar Fiado se houver
-        const fiadoPayment = payments.find(pm => pm.method === 'FIADO');
-        if (fiadoPayment && customerId) {
+        // 3. Atualizar Fiado se houver — revalida o limite DENTRO da transação
+        // (o saldo da tela pode estar defasado; soma TODAS as parcelas FIADO).
+        const fiadoTotal = payments
+          .filter(pm => pm.method === 'FIADO')
+          .reduce((acc, pm) => acc + pm.amount, 0);
+        if (fiadoTotal > 0 && customerId) {
           const customer = await db.customers.get(customerId);
-          if (customer) {
-            const prevBalance = customer.debtBalance || 0;
-            const newBalance = prevBalance + fiadoPayment.amount;
-
-            await db.customers.update(customerId, {
-              debtBalance: newBalance,
-              updatedAt: saleDate
-            });
-
-            await db.debtRecords.add({
-              id: crypto.randomUUID(),
-              customerId,
-              saleId: sale.id,
-              type: 'DEBIT',
-              amount: fiadoPayment.amount,
-              previousBalance: prevBalance,
-              newBalance,
-              date: saleDate,
-              description: `Compra na Caderneta (Cupom #${saleNumber})`,
-              receiptNumber: saleNumber
-            });
+          if (!customer) {
+            throw new Error('Cliente do fiado não encontrado.');
           }
+          const prevBalance = customer.debtBalance || 0;
+          const newBalance = Number((prevBalance + fiadoTotal).toFixed(2));
+          if (newBalance > (customer.creditLimit || 0) + 0.0001) {
+            throw new Error(`Limite de crédito excedido para "${customer.name}". Limite: R$ ${(customer.creditLimit || 0).toFixed(2)}, ficaria R$ ${newBalance.toFixed(2)}.`);
+          }
+
+          await db.customers.update(customerId, {
+            debtBalance: newBalance,
+            updatedAt: saleDate
+          });
+
+          await db.debtRecords.add({
+            id: crypto.randomUUID(),
+            customerId,
+            saleId: sale.id,
+            type: 'DEBIT',
+            amount: Number(fiadoTotal.toFixed(2)),
+            previousBalance: prevBalance,
+            newBalance,
+            date: saleDate,
+            description: `Compra na Caderneta (Cupom #${finalSaleNumber})`,
+            receiptNumber: finalSaleNumber
+          });
         }
 
         // 4. Atualizar Sessão de Caixa Ativa (sem mutar o objeto da live query)
@@ -506,23 +536,27 @@ export const PDV: React.FC = () => {
           const totals = { ...session.totalSales };
           payments.forEach(pm => {
             if (pm.method === 'CASH') {
-              totals.cash += netCash;
+              totals.cash = Number((totals.cash + netCash).toFixed(2));
             } else if (pm.method === 'PIX') {
-              totals.pix += pm.amount;
+              totals.pix = Number((totals.pix + pm.amount).toFixed(2));
             } else if (pm.method === 'CREDIT_CARD') {
-              totals.credit += pm.amount;
+              totals.credit = Number((totals.credit + pm.amount).toFixed(2));
             } else if (pm.method === 'DEBIT_CARD') {
-              totals.debit += pm.amount;
+              totals.debit = Number((totals.debit + pm.amount).toFixed(2));
             } else if (pm.method === 'FIADO') {
-              totals.fiado += pm.amount;
+              totals.fiado = Number((totals.fiado + pm.amount).toFixed(2));
             } else if (pm.method === 'VOUCHER') {
-              totals.voucher += pm.amount;
+              totals.voucher = Number((totals.voucher + pm.amount).toFixed(2));
             }
           });
+          // totalSales.total é o líquido da venda (troco não conta): igual ao
+          // total do cupom, não à soma bruta recebida.
+          totals.total = Number((totals.total + total).toFixed(2));
 
           await db.cashSessions.update(session.id, {
             totalSales: totals,
-            expectedCashInDrawer: Number((session.expectedCashInDrawer + netCash).toFixed(2))
+            expectedCashInDrawer: Number((session.expectedCashInDrawer + netCash).toFixed(2)),
+            currentBalance: Number((session.expectedCashInDrawer + netCash).toFixed(2))
           });
         }
 
@@ -540,7 +574,7 @@ export const PDV: React.FC = () => {
       setCart([]);
       setGlobalDiscount(0);
       setSearchTerm('');
-      toast.success(`Venda #${saleNumber} finalizada com sucesso!`);
+      toast.success(`Venda #${sale.saleNumber} finalizada com sucesso!`);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Erro ao registrar a venda.');
@@ -548,7 +582,7 @@ export const PDV: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)] bg-slate-50 dark:bg-slate-900 overflow-hidden">
       
       {/* Área Esquerda - Catálogo de Produtos e Busca */}
       <div className="flex-1 flex flex-col p-3 overflow-hidden">
@@ -686,7 +720,7 @@ export const PDV: React.FC = () => {
       </div>
 
       {/* Área Direita - Carrinho de Vendas */}
-      <div className="w-full lg:w-[420px] bg-white dark:bg-slate-800 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-700 flex flex-col shadow-xl z-10 shrink-0">
+      <div className="w-full lg:w-[420px] bg-white dark:bg-slate-800 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-700 flex flex-col z-10 shrink-0">
         
         {/* Cabeçalho do Carrinho */}
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">

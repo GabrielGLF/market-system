@@ -49,23 +49,31 @@ export function buildCashAudit(
     { time: '', kind: 'OPENING', label: 'Fundo inicial (abertura)', delta: openingBalance },
   ];
 
-  // Vendas em dinheiro: o que entrou de cash é max(0, recebido − troco).
-  // O registro da venda não guarda netCash explicitamente; recompõe do
-  // pagamento CASH (receivedAmount quando existir) menos o troco proporcional.
+  // Vendas em dinheiro: o que entrou de cash é o líquido (recebido − troco).
+  // Vendas com devolução parcial já têm paymentMethods líquidos (o valor
+  // devolvido foi subtraído); nesse caso usa pm.amount direto, senão o
+  // details.receivedAmount − change recomporia o bruto e a auditoria
+  // divergiria do expected após qualquer devolução em cash.
   for (const sale of sales) {
     if (sale.status === 'CANCELLED') continue;
     const cashPm = sale.paymentMethods?.find(pm => pm.method === 'CASH');
     if (!cashPm) continue;
 
-    const cashAmount =
-      cashPm.details?.receivedAmount != null
-        ? cashPm.details.receivedAmount
-        : cashPm.amount;
-    // Troco: o gravado no pagamento; fallback = diferença recebido − líquido.
-    const change =
-      cashPm.details?.change ??
-      Math.max(0, cashAmount - cashPm.amount);
-    const netCash = Math.max(0, cashAmount - change);
+    const hasRefunds = (sale.refundedAmount || 0) > 0 || (sale.refunds && sale.refunds.length > 0);
+    let netCash: number;
+    if (hasRefunds) {
+      netCash = Math.max(0, cashPm.amount);
+    } else {
+      const cashAmount =
+        cashPm.details?.receivedAmount != null
+          ? cashPm.details.receivedAmount
+          : cashPm.amount;
+      // Troco: o gravado no pagamento; fallback = diferença recebido − líquido.
+      const change =
+        cashPm.details?.change ??
+        Math.max(0, cashAmount - cashPm.amount);
+      netCash = Math.max(0, cashAmount - change);
+    }
 
     raw.push({
       time: sale.date,

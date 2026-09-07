@@ -7,12 +7,13 @@ import {
   loadCompletedSalesBetween, loadRecentSales,
   localMidnightIso, localDayIso, dayStartIso, dayEndIso
 } from '../utils/analytics';
-import { 
-  TrendingUp, Package, DollarSign, AlertCircle, 
-  ShoppingCart, ArrowRight, Wallet, Percent, 
-  PackagePlus, PlusCircle, Bell, ChevronRight
+import {
+  TrendingUp, Package, DollarSign, AlertCircle,
+  ShoppingCart, ArrowRight, Wallet, Percent,
+  PackagePlus, Bell, ChevronRight
 } from 'lucide-react';
 import { buildActionItems, type ActionItem } from '../utils/actionCenter';
+import { PageHeader, Stat, Card } from '../components/ui';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, BarChart, Bar 
@@ -68,105 +69,73 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
-    <div className="space-y-6 pb-8 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Dashboard</h1>
-          <p className="text-slate-500 dark:text-slate-400">Visão geral do seu negócio hoje</p>
-        </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => onNavigate('pdv')} className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors font-medium">
-            <ShoppingCart className="w-4 h-4 mr-2" /> PDV (F2)
-          </button>
-          <button onClick={() => onNavigate('inventory')} className="flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg shadow-sm transition-colors font-medium">
-            <PackagePlus className="w-4 h-4 mr-2" /> Entrada
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5 pb-8 animate-in fade-in duration-300">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Visão geral do seu negócio hoje"
+        actions={
+          <>
+            <button onClick={() => onNavigate('pdv')} className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold">
+              <ShoppingCart className="w-4 h-4 mr-2" /> PDV
+              <kbd className="hidden md:inline ml-1.5 px-1 py-px rounded text-[10px] font-mono bg-white/20">F2</kbd>
+            </button>
+            <button onClick={() => onNavigate('inventory')} className="flex items-center px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors text-sm font-semibold">
+              <PackagePlus className="w-4 h-4 mr-2" /> Entrada
+            </button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Vendas Hoje */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between group hover:border-emerald-500 transition-colors">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Vendas Hoje</p>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{formatCurrency(todayRevenue)}</h3>
-            </div>
-            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm">
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center">
-              <TrendingUp className="w-3 h-3 mr-1" /> {todaysSales.length} vendas
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat
+          label="Vendas hoje"
+          value={formatCurrency(todayRevenue)}
+          icon={<DollarSign className="w-5 h-5" />}
+          hint={
+            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+              <TrendingUp className="w-3 h-3" /> {todaysSales.length} vendas
             </span>
-          </div>
-        </div>
+          }
+        />
 
-        {/* Margem Média */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Margem Média Hoje</p>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{todayMargin.toFixed(1)}%</h3>
-            </div>
-            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
-              <Percent className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-            Lucro estimado: {formatCurrency(todayProfit)}
-          </div>
-        </div>
+        <Stat
+          label="Margem média hoje"
+          value={`${todayMargin.toFixed(1)}%`}
+          icon={<Percent className="w-5 h-5" />}
+          hint={`Lucro estimado: ${formatCurrency(todayProfit)}`}
+        />
 
-        {/* Valor em Estoque */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Valor em Estoque</p>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{formatCurrency(totalCost)}</h3>
-            </div>
-            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
-              <Wallet className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-            Projeção de venda: {formatCurrency(totalProjectedRevenue)}
-          </div>
-        </div>
+        <Stat
+          label="Valor em estoque"
+          value={formatCurrency(totalCost)}
+          icon={<Wallet className="w-5 h-5" />}
+          hint={`Projeção de venda: ${formatCurrency(totalProjectedRevenue)}`}
+        />
 
-        {/* Produtos */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total de Produtos</p>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{products.length}</h3>
-            </div>
-            <div className="p-2 bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-300 rounded-lg">
-              <Package className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm">
-            {lowStockProducts.length > 0 ? (
-              <span className="text-orange-600 dark:text-orange-400 font-medium flex items-center">
-                <AlertCircle className="w-3 h-3 mr-1" /> {lowStockProducts.length} com estoque baixo
+        <Stat
+          label="Total de produtos"
+          value={products.length}
+          icon={<Package className="w-5 h-5" />}
+          hint={
+            lowStockProducts.length > 0 ? (
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                <AlertCircle className="w-3 h-3" /> {lowStockProducts.length} com estoque baixo
               </span>
             ) : (
               <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                 Estoque regularizado
               </span>
-            )}
-          </div>
-        </div>
+            )
+          }
+        />
       </div>
 
       {/* Central de Ações: o que precisa de atenção hoje */}
       {actions.length > 0 && actionsOpen && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100 dark:border-slate-700">
-            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <Bell className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+        <Card className="overflow-hidden">
+          <div className="flex justify-between items-center px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+              <Bell className="w-4 h-4 text-slate-400" />
               Precisa de atenção
               <span className="text-xs font-medium text-slate-400">({actions.length})</span>
             </h3>
@@ -179,7 +148,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               <button
                 key={a.id}
                 onClick={() => onNavigate(a.target)}
-                className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors text-left"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -194,13 +163,13 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               </button>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Gráfico */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Evolução de Vendas (7 Dias)</h3>
+        <Card className="lg:col-span-2 p-4">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Evolução de vendas · 7 dias</h3>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -221,32 +190,32 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
         {/* Alerta de Estoque Baixo */}
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center">
-              <AlertCircle className="w-5 h-5 text-orange-500 mr-2" /> Estoque Baixo
+        <Card className="p-4 flex flex-col">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-amber-500" /> Estoque baixo
             </h3>
-            <button onClick={() => onNavigate('inventory')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">Ver todos</button>
+            <button onClick={() => onNavigate('inventory')} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">Ver todos</button>
           </div>
-          
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
             {lowStockProducts.length === 0 ? (
               <div className="text-center py-8 text-slate-500 dark:text-slate-400">
                 <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>Nenhum produto com estoque baixo.</p>
+                <p className="text-sm">Nenhum produto com estoque baixo.</p>
               </div>
             ) : (
               lowStockProducts.slice(0, 6).map(p => (
-                <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700">
+                <div key={p.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 dark:bg-slate-700/40 rounded-lg">
                   <div className="truncate pr-3">
                     <p className="font-medium text-slate-800 dark:text-white text-sm truncate">{p.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{p.barcode}</p>
+                    <p className="text-xs text-slate-400">{p.barcode}</p>
                   </div>
                   <div className="text-right whitespace-nowrap">
-                    <p className={`font-bold ${p.stock <= 0 ? 'text-red-500' : 'text-orange-500'}`}>
+                    <p className={`font-bold tabular-nums text-sm ${p.stock <= 0 ? 'text-rose-500' : 'text-amber-600 dark:text-amber-400'}`}>
                       {formatNumber(p.stock)} <span className="text-xs font-normal">{p.unit}</span>
                     </p>
                   </div>
@@ -254,15 +223,15 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
               ))
             )}
           </div>
-        </div>
+        </Card>
       </div>
-      
+
       {/* Últimas Vendas */}
-      <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Últimas Vendas</h3>
-          <button onClick={() => onNavigate('sales')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center">
-            Ver todas <ArrowRight className="w-4 h-4 ml-1" />
+      <Card className="p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Últimas vendas</h3>
+          <button onClick={() => onNavigate('sales')} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center">
+            Ver todas <ArrowRight className="w-3.5 h-3.5 ml-1" />
           </button>
         </div>
         
@@ -309,7 +278,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: string) => void }) {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

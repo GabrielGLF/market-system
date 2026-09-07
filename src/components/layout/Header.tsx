@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { 
+import {
   Menu, WifiOff, Sun, Moon, Monitor,
   Keyboard, ShoppingCart, Wallet, PanelLeftClose, PanelLeftOpen, CloudUpload
 } from 'lucide-react';
+import { Badge } from '../ui';
 
 interface HeaderProps {
   onOpenSidebar: () => void;
@@ -59,80 +60,75 @@ export function Header({ onOpenSidebar, onToggleSidebar, sidebarCollapsed, onOpe
   const isCashOpen = !!activeCashSession;
 
   return (
-    <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 shadow-xs z-30">
-      <div className="flex items-center">
-        <button 
+    <header className="h-14 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-3 sm:px-4 z-30 shrink-0">
+      <div className="flex items-center min-w-0">
+        <button
           onClick={onOpenSidebar}
-          className="lg:hidden p-2 mr-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md"
+          className="lg:hidden p-2 mr-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+          aria-label="Abrir menu"
         >
           <Menu className="w-5 h-5" />
         </button>
-        
+
         {/* Colapsar / Expandir barra lateral (desktop) */}
         <button
           onClick={onToggleSidebar}
-          className="hidden lg:flex p-2 mr-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
+          className="hidden lg:flex p-2 mr-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
           title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
         >
-          {sidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+          {sidebarCollapsed ? <PanelLeftOpen className="w-[18px] h-[18px]" /> : <PanelLeftClose className="w-[18px] h-[18px]" />}
         </button>
-        
-        <div className="hidden sm:flex items-center ml-2 space-x-2">
+
+        <div className="hidden sm:flex items-center ml-1">
           {isOnline && pendingSync > 0 ? (
-            <span className="flex items-center text-amber-600 dark:text-amber-400 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800/50" title="Aguardando envio para a nuvem">
-              <CloudUpload className="w-3.5 h-3.5 mr-1.5" /> {pendingSync} pendente{pendingSync > 1 ? 's' : ''}
-            </span>
+            <Badge tone="warning" title="Aguardando envio para a nuvem">
+              <CloudUpload className="w-3.5 h-3.5" /> {pendingSync} pendente{pendingSync > 1 ? 's' : ''}
+            </Badge>
           ) : isOnline ? (
-            <span className="flex items-center text-emerald-600 dark:text-emerald-400 text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> Online
-            </span>
+            <Badge tone="positive" dot pulse>Online</Badge>
           ) : (
-            <span className="flex items-center text-amber-600 dark:text-amber-400 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800/50">
-              <WifiOff className="w-3.5 h-3.5 mr-1.5" /> Modo Offline (IndexedDB)
-            </span>
+            <Badge tone="warning" title="Dados salvos localmente (IndexedDB)">
+              <WifiOff className="w-3.5 h-3.5" /> Offline
+            </Badge>
           )}
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 sm:space-x-3">
-        {/* Quick Actions */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <button
           onClick={() => onNavigate('pdv')}
-          className="flex items-center px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm shadow-emerald-600/20 transition-colors cursor-pointer"
+          className="flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer"
         >
-          <ShoppingCart className="w-3.5 h-3.5 mr-1.5" /> PDV (F2)
-        </button>
-        
-        <button
-          onClick={() => onNavigate('cash')}
-          className={`flex items-center px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer border ${
-            isCashOpen 
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300' 
-              : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300'
-          }`}
-          title={isCashOpen ? 'Caixa Aberto - Clique para detalhes' : 'Caixa Fechado - Clique para abrir'}
-        >
-          <Wallet className="w-3.5 h-3.5 mr-1.5" /> 
-          <span className="hidden sm:inline">{isCashOpen ? 'Caixa Aberto' : 'Caixa Fechado'}</span>
-          <span className={`w-2 h-2 rounded-full ml-1.5 ${isCashOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+          <ShoppingCart className="w-3.5 h-3.5 mr-1.5" /> PDV
+          <kbd className="hidden md:inline ml-1.5 px-1 py-px rounded text-[10px] font-mono bg-white/20">F2</kbd>
         </button>
 
-        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
+        <button
+          onClick={() => onNavigate('cash')}
+          className="flex items-center px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors cursor-pointer text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+          title={isCashOpen ? 'Caixa aberto — ver detalhes' : 'Caixa fechado — clique para abrir'}
+        >
+          <Wallet className="w-3.5 h-3.5 mr-1.5" />
+          <span className="hidden sm:inline">{isCashOpen ? 'Caixa aberto' : 'Caixa fechado'}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ml-1.5 ${isCashOpen ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+        </button>
+
+        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-0.5 hidden sm:block" />
 
         <button
           onClick={onOpenShortcuts}
-          className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-          title="Atalhos de Teclado (F1)"
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+          title="Atalhos de teclado (F1)"
         >
           <Keyboard className="w-4 h-4" />
         </button>
 
         <button
           onClick={toggleTheme}
-          className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-          title="Alternar Tema (Claro / Escuro / Sistema)"
+          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+          title="Alternar tema (claro / escuro / sistema)"
         >
-          {theme === 'light' ? <Sun className="w-4 h-4 text-amber-500" /> : theme === 'dark' ? <Moon className="w-4 h-4 text-blue-400" /> : <Monitor className="w-4 h-4" />}
+          {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
         </button>
 
       </div>

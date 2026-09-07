@@ -1,18 +1,48 @@
 let audioCtx: AudioContext | null = null;
 
-function getContext(): AudioContext {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+/** Mute global sincronizado do settings (soundEnabled). Default: som ligado. */
+function isSoundEnabled(): boolean {
+  try {
+    if (typeof window !== 'undefined' && (window as unknown as { __soundEnabled?: boolean }).__soundEnabled === false) {
+      return false;
+    }
+  } catch {
+    // ignora
   }
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+  return true;
+}
+
+export function setSoundEnabledCache(enabled: boolean): void {
+  try {
+    (window as unknown as { __soundEnabled?: boolean }).__soundEnabled = enabled;
+  } catch {
+    // ignora
   }
-  return audioCtx;
+}
+
+function getContext(): AudioContext | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const Ctor =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!audioCtx) {
+      audioCtx = new Ctor();
+    }
+    if (audioCtx.state === 'suspended') {
+      void audioCtx.resume().catch(() => undefined);
+    }
+    return audioCtx;
+  } catch {
+    return null;
+  }
 }
 
 export function playBeep() {
+  if (!isSoundEnabled()) return;
   try {
     const ctx = getContext();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
@@ -34,8 +64,10 @@ export function playBeep() {
 }
 
 export function playSuccess() {
+  if (!isSoundEnabled()) return;
   try {
     const ctx = getContext();
+    if (!ctx) return;
     
     const playNote = (freq: number, startTime: number, duration: number) => {
       const osc = ctx.createOscillator();
@@ -64,8 +96,10 @@ export function playSuccess() {
 }
 
 export function playError() {
+  if (!isSoundEnabled()) return;
   try {
     const ctx = getContext();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
@@ -87,8 +121,10 @@ export function playError() {
 }
 
 export function playClick() {
+  if (!isSoundEnabled()) return;
   try {
     const ctx = getContext();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     

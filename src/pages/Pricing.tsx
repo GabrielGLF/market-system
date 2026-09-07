@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { Product, Category } from '../types';
-import { Search, Tags, History, TrendingUp, Percent, DollarSign, AlertTriangle } from 'lucide-react';
+import { Search, History, AlertTriangle, TrendingDown } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../utils/format';
 import { calculateMargin, calculateMarkup } from '../utils/calc';
 import { QuickPricePopover } from '../components/pricing/QuickPricePopover';
 import { PriceHistoryModal } from '../components/pricing/PriceHistoryModal';
 import { usePagination } from '../components/common/Pagination';
+import { PageHeader, Card } from '../components/ui';
 
 export function Pricing() {
   const products = useLiveQuery(() => db.products.filter(p => p.isActive).toArray()) || [];
@@ -55,50 +56,43 @@ export function Pricing() {
   const { pageItems, paginationUI } = usePagination(filteredProducts, [search, selectedCategory]);
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Tags className="w-7 h-7 text-slate-500 dark:text-slate-300" />
-            Gestão & Análise de Precificação
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Edição rápida de preços, margens de lucro, markup e histórico de alterações.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-5 pb-12">
+      <PageHeader
+        title="Preços e margens"
+        subtitle="Edição rápida de preços, margens de lucro, markup e histórico de alterações."
+      />
 
       {/* Alertas de Precificação — insights acionáveis com base em dados reais */}
       {(lowMarginProducts.length > 0 || costUpNoReprice.length > 0) && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-amber-200 dark:border-amber-800/60 overflow-hidden">
-          <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <h2 className="text-sm font-bold text-amber-900 dark:text-amber-300">Alertas de Precificação</h2>
+        <Card className="overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Alertas de precificação</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-amber-100 dark:bg-amber-900/40">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100 dark:bg-slate-700/50">
             {lowMarginProducts.length > 0 && (
               <div className="bg-white dark:bg-slate-800 p-4">
-                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-2">
-                  ⚠️ Margem abaixo de 10% ({lowMarginProducts.length})
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mb-2">
+                  Margem abaixo de 10% ({lowMarginProducts.length})
                 </p>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {lowMarginProducts.slice(0, 10).map(p => (
                     <div key={p.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
                       <span className="truncate pr-2">{p.name}</span>
-                      <span className="font-bold whitespace-nowrap">{calculateMargin(p.costPrice, p.sellPrice).toFixed(1)}%</span>
+                      <span className="font-bold tabular-nums whitespace-nowrap">{calculateMargin(p.costPrice, p.sellPrice).toFixed(1)}%</span>
                     </div>
                   ))}
                   {lowMarginProducts.length > 10 && (
-                    <p className="text-[10px] text-slate-400">+{lowMarginProducts.length - 10} outros — revise a tabela abaixo.</p>
+                    <p className="text-[11px] text-slate-400">+{lowMarginProducts.length - 10} outros — revise a tabela abaixo.</p>
                   )}
                 </div>
               </div>
             )}
             {costUpNoReprice.length > 0 && (
               <div className="bg-white dark:bg-slate-800 p-4">
-                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-2">
-                  📈 Custo subiu sem reajuste de preço ({costUpNoReprice.length})
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
+                  <TrendingDown className="w-3.5 h-3.5" />
+                  Custo subiu sem reajuste de preço ({costUpNoReprice.length})
                 </p>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {costUpNoReprice.slice(0, 10).map(p => {
@@ -106,20 +100,20 @@ export function Pricing() {
                     return (
                       <div key={p.id} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
                         <span className="truncate pr-2">{p.name}</span>
-                        <span className="whitespace-nowrap">
+                        <span className="whitespace-nowrap tabular-nums">
                           Custo {formatCurrency(h.oldCostPrice)} → {formatCurrency(h.newCostPrice)}
                         </span>
                       </div>
                     );
                   })}
                   {costUpNoReprice.length > 10 && (
-                    <p className="text-[10px] text-slate-400">+{costUpNoReprice.length - 10} outros.</p>
+                    <p className="text-[11px] text-slate-400">+{costUpNoReprice.length - 10} outros.</p>
                   )}
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Tabela de Preços */}

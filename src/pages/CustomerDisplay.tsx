@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCustomerDisplay } from '../hooks/useCustomerDisplay';
 import { ShoppingCart, QrCode, CheckCircle2, Store } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { formatCurrency, formatNumber } from '../utils/format';
 
 export const CustomerDisplay: React.FC = () => {
@@ -126,7 +127,17 @@ export const CustomerDisplay: React.FC = () => {
                 <div className="bg-white rounded-xl p-6 text-center text-slate-900">
                   <QrCode className="w-12 h-12 mx-auto mb-4 text-blue-600" />
                   <div className="font-bold text-xl mb-4">Escaneie para pagar</div>
-                  <img src={state.pixQrCode} alt="QR Code Pix" className="w-full h-auto rounded-lg mb-4" />
+                  {/* QR 100% local/offline: pixQrCode carrega a chave (legado podia ser URL externa) */}
+                  {state.pixQrCode.startsWith('http') ? (
+                    <img src={state.pixQrCode} alt="QR Code Pix" className="w-full h-auto rounded-lg mb-4" />
+                  ) : (
+                    <div className="flex justify-center mb-4">
+                      <QRCode value={state.pixQrCode} size={220} />
+                    </div>
+                  )}
+                  {state.pixKey && (
+                    <div className="font-mono text-xs text-slate-600 break-all">{state.pixKey}</div>
+                  )}
                 </div>
               )}
             </div>

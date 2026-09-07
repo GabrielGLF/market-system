@@ -103,6 +103,15 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
 
     try {
       await db.transaction('rw', [db.sales, db.products, db.stockMovements, db.customers, db.debtRecords, db.cashSessions], async () => {
+        // Idempotência: relê dentro da transação; duplo clique/concorrência
+        // não pode gerar duplo RETURN + duplo estorno.
+        const fresh = await db.sales.get(sale.id);
+        if (!fresh) throw new Error('Venda não encontrada.');
+        if (fresh.status === 'CANCELLED') throw new Error('Venda já está cancelada.');
+        if ((fresh.refundedAmount || 0) > 0 || (fresh.refunds && fresh.refunds.length > 0)) {
+          throw new Error('Venda possui devoluções parciais. Use a devolução para estornar o restante.');
+        }
+
         await db.sales.update(sale.id, {
           status: 'CANCELLED',
           cancelReason,
@@ -138,8 +147,13 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
         if (sale.paymentMethods.some(p => p.method === 'FIADO') && sale.customerId) {
           const customer = await db.customers.get(sale.customerId);
           if (customer) {
-            const fiadoAmount = sale.paymentMethods.find(p => p.method === 'FIADO')?.amount || 0;
-            const newBalance = customer.debtBalance - fiadoAmount;
+            // Soma TODAS as parcelas FIADO (não só a primeira) e nunca deixa
+            // saldo negativo — cliente pode já ter amortizado parte.
+            const fiadoAmount = sale.paymentMethods
+              .filter(p => p.method === 'FIADO')
+              .reduce((acc, p) => acc + p.amount, 0);
+            const prev = customer.debtBalance || 0;
+            const newBalance = Math.max(0, Number((prev - fiadoAmount).toFixed(2)));
             await db.customers.update(customer.id, { debtBalance: newBalance });
             
             await db.debtRecords.add({
@@ -147,12 +161,12 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
               customerId: customer.id,
               saleId: sale.id,
               type: 'PAYMENT',
-              amount: fiadoAmount,
-              previousBalance: customer.debtBalance,
+              amount: Number(fiadoAmount.toFixed(2)),
+              previousBalance: prev,
               newBalance: newBalance,
               date: new Date().toISOString(),
               description: `Estorno de venda #${sale.saleNumber}`,
-              receiptNumber: ''
+              receiptNumber: sale.saleNumber
             });
           }
         }
@@ -170,17 +184,19 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({ sale, onClose,
 
             const totals = { ...session.totalSales };
             sale.paymentMethods.forEach(pm => {
-              if (pm.method === 'CASH') totals.cash -= netCash;
-              else if (pm.method === 'PIX') totals.pix -= pm.amount;
-              else if (pm.method === 'CREDIT_CARD') totals.credit -= pm.amount;
-              else if (pm.method === 'DEBIT_CARD') totals.debit -= pm.amount;
-              else if (pm.method === 'FIADO') totals.fiado -= pm.amount;
-              else if (pm.method === 'VOUCHER') totals.voucher -= pm.amount;
+              if (pm.method === 'CASH') totals.cash = Number((totals.cash - netCash).toFixed(2));
+              else if (pm.method === 'PIX') totals.pix = Number((totals.pix - pm.amount).toFixed(2));
+              else if (pm.method === 'CREDIT_CARD') totals.credit = Number((totals.credit - pm.amount).toFixed(2));
+              else if (pm.method === 'DEBIT_CARD') totals.debit = Number((totals.debit - pm.amount).toFixed(2));
+              else if (pm.method === 'FIADO') totals.fiado = Number((totals.fiado - pm.amount).toFixed(2));
+              else if (pm.method === 'VOUCHER') totals.voucher = Number((totals.voucher - pm.amount).toFixed(2));
             });
+            totals.total = Number((totals.total - sale.total).toFixed(2));
 
             await db.cashSessions.update(session.id, {
               totalSales: totals,
-              expectedCashInDrawer: Number((session.expectedCashInDrawer - netCash).toFixed(2))
+              expectedCashInDrawer: Number((session.expectedCashInDrawer - netCash).toFixed(2)),
+              currentBalance: Number((session.expectedCashInDrawer - netCash).toFixed(2))
             });
           }
         }

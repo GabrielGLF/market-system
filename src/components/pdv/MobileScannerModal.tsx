@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Smartphone, Link } from 'lucide-react';
+import QRCode from 'react-qr-code';
+import { createBroadcastChannel, safePairingCode } from '../../utils/browser';
 
 interface MobileScannerModalProps {
   isOpen: boolean;
@@ -12,19 +14,27 @@ export const MobileScannerModal: React.FC<MobileScannerModalProps> = ({ isOpen, 
 
   useEffect(() => {
     if (isOpen) {
-      // Generate a random 6 character code
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      // Código criptográfico (sem ambíguos) + canal com guard para WebView antiga.
+      const code = safePairingCode(6);
       setPairingCode(code);
 
-      const bc = new BroadcastChannel('market-mobile-scanner');
+      const bc = createBroadcastChannel('market-mobile-scanner');
+      if (!bc) return;
       bc.onmessage = (event) => {
-        if (event.data.type === 'BARCODE_SCANNED' && event.data.pairingCode === code) {
-          onBarcodeScanned(event.data.barcode);
+        const data = event?.data;
+        if (!data || typeof data !== 'object') return;
+        if (typeof data.barcode !== 'string' || data.barcode.length > 64) return;
+        if (data.type === 'BARCODE_SCANNED' && data.pairingCode === code) {
+          onBarcodeScanned(data.barcode);
         }
       };
 
       return () => {
-        bc.close();
+        try {
+          bc.close();
+        } catch {
+          // ignora
+        }
       };
     }
   }, [isOpen, onBarcodeScanned]);
@@ -54,6 +64,11 @@ export const MobileScannerModal: React.FC<MobileScannerModalProps> = ({ isOpen, 
             <div className="text-4xl font-bold tracking-widest text-slate-900 dark:text-white font-mono">
               {pairingCode}
             </div>
+            {pairingCode && (
+              <div className="flex justify-center mt-4 bg-white dark:bg-slate-900 p-3 rounded-md">
+                <QRCode value={mobileUrl} size={140} />
+              </div>
+            )}
           </div>
 
           <button

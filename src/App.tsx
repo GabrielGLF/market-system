@@ -18,6 +18,8 @@ import { seedDatabase } from './db/seed';
 import { db } from './db';
 import { installSyncHooks, startSyncEngine } from './utils/sync';
 import { runAutoBackupIfDue } from './utils/cloudBackup';
+import { setSoundEnabledCache } from './utils/audio';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 function App() {
   const [currentView, setCurrentView] = useState<string>(() => {
@@ -27,6 +29,16 @@ function App() {
   });
 
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // Sincroniza o mute global (settings.soundEnabled) com o cache lido pelos
+  // play*() — antes o toggle em Settings nunca era lido fora de Settings.
+  const soundEnabled = useLiveQuery(async () => {
+    const s = await db.settings.toCollection().first();
+    return s?.soundEnabled ?? true;
+  }, [], true);
+  useEffect(() => {
+    setSoundEnabledCache(soundEnabled ?? true);
+  }, [soundEnabled]);
 
   // Outbox de sincronização: hooks instalados uma única vez, antes de qualquer
   // gravação (toda escrita em tabela sincronizada gera entrada pendente).
